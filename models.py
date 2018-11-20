@@ -23,18 +23,19 @@ class Analogy(nn.Module):
         self.rel_im_embeddings = nn.Embedding(num_rels,hidden_size/2)
         self.ent_embeddings = nn.Embedding(num_ents, hidden_size)
         self.rel_embeddings = nn.Embedding(num_rels, hidden_size)
+        self.softplus = nn.Softplus()
         self.init_embeddings()
 
     def init_embeddings(self):
         """
         Initializes the embedding weights
         """
-        nn.init.xavier_uniform(self.ent_re_embeddings.weight.data)
-        nn.init.xavier_uniform(self.ent_im_embeddings.weight.data)
-        nn.init.xavier_uniform(self.rel_re_embeddings.weight.data)
-        nn.init.xavier_uniform(self.rel_im_embeddings.weight.data)
-        nn.init.xavier_uniform(self.ent_embeddings.weight.data)
-        nn.init.xavier_uniform(self.rel_embeddings.weight.data)
+        nn.init.xavier_uniform_(self.ent_re_embeddings.weight.data)
+        nn.init.xavier_uniform_(self.ent_im_embeddings.weight.data)
+        nn.init.xavier_uniform_(self.rel_re_embeddings.weight.data)
+        nn.init.xavier_uniform_(self.rel_im_embeddings.weight.data)
+        nn.init.xavier_uniform_(self.ent_embeddings.weight.data)
+        nn.init.xavier_uniform_(self.rel_embeddings.weight.data)
 
     def _calc(self,e_re_s,e_im_s,e_s,e_re_o,e_im_o,e_o,r_re,r_im,r):
         """
@@ -64,18 +65,20 @@ class Analogy(nn.Module):
         :param labels: labels for input batch
         :return: returns average loss over the batch
         """
-        batch_s, batch_r, batch_o = batch
-        batch_y = labels
+        batch_s = batch[:,0]
+        batch_r = batch[:,1]
+        batch_o = batch[:,2]
+        batch_y = Variable(torch.from_numpy(labels))
         # get the corresponding embeddings for calculations
-        e_re_s = self.ent_re_embeddings(Variable(torch.from_numpy(batch_s)))
-        e_im_s = self.ent_im_embeddings(Variable(torch.from_numpy(batch_s)))
-        e_s = self.ent_embeddings(Variable(torch.from_numpy(batch_s)))
-        r_re = self.rel_re_embeddings(Variable(torch.from_numpy(batch_r)))
-        r_im = self.rel_im_embeddings(Variable(torch.from_numpy(batch_r)))
-        r = self.rel_embeddings(Variable(torch.from_numpy(batch_r)))
-        e_re_o = self.ent_re_embeddings(Variable(torch.from_numpy(batch_o)))
-        e_im_o = self.ent_im_embeddings(Variable(torch.from_numpy(batch_o)))
-        e_o = self.ent_embeddings(Variable(torch.from_numpy(batch_o)))
+        e_re_s = self.ent_re_embeddings(batch_s)
+        e_im_s = self.ent_im_embeddings(batch_s)
+        e_s = self.ent_embeddings(batch_s)
+        r_re = self.rel_re_embeddings(batch_r)
+        r_im = self.rel_im_embeddings(batch_r)
+        r = self.rel_embeddings(batch_r)
+        e_re_o = self.ent_re_embeddings(batch_o)
+        e_im_o = self.ent_im_embeddings(batch_o)
+        e_o = self.ent_embeddings(batch_o)
         # calculates the loss
         res = self._calc(e_re_s,e_im_s,e_s,e_re_o,e_im_o,e_o,r_re,r_im,r)
         emb_loss = torch.mean(self.softplus(- batch_y * res))
@@ -93,7 +96,10 @@ class Analogy(nn.Module):
         :param batch:
         :return:
         """
-        batch_s, batch_r, batch_o = batch
+        batch_s = batch[:,0]
+        batch_r = batch[:,1]
+        batch_o = batch[:,2]
+        # get the corresponding embeddings for calculations
         p_re_s = self.ent_re_embeddings(Variable(torch.from_numpy(batch_s)))
         p_re_o = self.ent_re_embeddings(Variable(torch.from_numpy(batch_o)))
         p_re_r = self.rel_re_embeddings(Variable(torch.from_numpy(batch_r)))
@@ -103,7 +109,32 @@ class Analogy(nn.Module):
         p_s = self.ent_im_embeddings(Variable(torch.from_numpy(batch_s)))
         p_o = self.ent_im_embeddings(Variable(torch.from_numpy(batch_o)))
         p_r = self.rel_im_embeddings(Variable(torch.from_numpy(batch_r)))
+        # calculates the score
         score = -self._calc(p_re_s, p_im_s, p_s,
                               p_re_o, p_im_o, p_o,
                               p_re_r, p_im_r, p_r)
         return score.cpu()
+
+
+if __name__ == "__main__":
+    from datasets.data_utils import KnowledgeTriplesDataset
+    from torch.utils.data import DataLoader
+    import numpy as np
+
+    # creates triples dataset
+    dataset = KnowledgeTriplesDataset("demo","train")
+    # creates analogy model
+    model = Analogy(len(dataset.e2i),len(dataset.r2i),100)
+
+    # loader batch loads triples for training
+    batch_size = 2
+    num_threads = 1
+    dataset_loader = DataLoader(dataset,batch_size=batch_size,shuffle=False,
+                                num_workers=num_threads)
+
+    # loop through data printing batch number and loss
+    labels = np.ones((batch_size,),np.float32) # all positive examples
+    for idx_b, batch in enumerate(dataset_loader):
+        loss = model.forward(batch,labels)
+        print "Loss of batch " + str(idx_b) + " is " + \
+              str(loss.detach().numpy())
