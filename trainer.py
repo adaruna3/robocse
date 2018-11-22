@@ -4,13 +4,12 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 # RoboCSE imports
-from datasets.data_utils import KnowledgeTriplesDataset
+from data_utils import KnowledgeTriplesDataset
 from models import Analogy
-from viz_utils import tp
+from logging.viz_utils import tp
 import trained_models
 from os.path import abspath,dirname
 import argparse
-import numpy as np
 import pdb
 from sys import stdin
 from select import select
@@ -106,7 +105,7 @@ if __name__ == "__main__":
     # parses command line arguments
     args = parse_command_line()
     # sets up triples dataset
-    dataset = KnowledgeTriplesDataset(args.ds_name,args.exp_name)
+    dataset = KnowledgeTriplesDataset(args.ds_name,args.exp_name,1,'random')
     # sets up batch data loader
     dataset_loader = DataLoader(dataset,
                                 batch_size=args.batch_size,
@@ -117,19 +116,19 @@ if __name__ == "__main__":
     # sets up optimization method
     tr_optimizer = initialize_optimizer(args.opt_method,args.opt_params,rcse)
 
-    # set up for save / load model
     # set up for evaluating training
+
     # set up for visualizing evaluation
 
     # runs training
-    labels = np.ones((args.batch_size,),np.float32) # all positive examples
     for epoch in xrange(args.num_epochs):
         total_loss = 0.0
         for idx_b, batch in enumerate(dataset_loader):
             tr_optimizer.zero_grad()
-            loss = rcse.forward(batch,labels)
+            loss = rcse.forward(batch)
             total_loss += loss.detach().numpy()
             loss.backward()
             tr_optimizer.step()
         tp('d','Total loss is ' + str(total_loss) + ' for epoch ' + str(epoch))
+    # save the trained model
     save_model(args.ds_name,args.exp_name,rcse.state_dict())

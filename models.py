@@ -2,6 +2,8 @@ import torch.nn as nn
 import torch
 from torch.autograd import Variable
 
+import pdb
+
 
 class Analogy(nn.Module):
     def __init__(self,num_ents,num_rels,hidden_size,lmbda=0.0):
@@ -58,17 +60,17 @@ class Analogy(nn.Module):
                          1,False) + \
                torch.sum(e_s*e_o*r,1,False)
 
-    def forward(self,batch,labels):
+    def forward(self,batch):
         """
         Feeds a batch of triples forward through the analogy model for training
         :param batch: input batch of triples
         :param labels: labels for input batch
         :return: returns average loss over the batch
         """
-        batch_s = batch[:,0]
-        batch_r = batch[:,1]
-        batch_o = batch[:,2]
-        batch_y = Variable(torch.from_numpy(labels))
+        batch_s = batch[:,:,0].reshape(batch.shape[0]*batch.shape[1])
+        batch_r = batch[:,:,1].reshape(batch.shape[0]*batch.shape[1])
+        batch_o = batch[:,:,2].reshape(batch.shape[0]*batch.shape[1])
+        batch_y = batch[:,:,3].reshape(batch.shape[0]*batch.shape[1])
         # get the corresponding embeddings for calculations
         e_re_s = self.ent_re_embeddings(batch_s)
         e_im_s = self.ent_im_embeddings(batch_s)
@@ -81,7 +83,7 @@ class Analogy(nn.Module):
         e_o = self.ent_embeddings(batch_o)
         # calculates the loss
         res = self._calc(e_re_s,e_im_s,e_s,e_re_o,e_im_o,e_o,r_re,r_im,r)
-        emb_loss = torch.mean(self.softplus(- batch_y * res))
+        emb_loss = torch.mean(self.softplus(- batch_y.float() * res))
         # included regularization term
         regul = torch.mean(e_re_s**2)+torch.mean(e_im_s**2)*torch.mean(e_s**2)+\
                torch.mean(e_re_o**2)+torch.mean(e_im_o**2)+torch.mean(e_o**2)+\
@@ -117,12 +119,11 @@ class Analogy(nn.Module):
 
 
 if __name__ == "__main__":
-    from datasets.data_utils import KnowledgeTriplesDataset
+    from data_utils import KnowledgeTriplesDataset
     from torch.utils.data import DataLoader
-    import numpy as np
 
     # creates triples dataset
-    dataset = KnowledgeTriplesDataset("demo","train")
+    dataset = KnowledgeTriplesDataset("demo","train",1,'random')
     # creates analogy model
     model = Analogy(len(dataset.e2i),len(dataset.r2i),100)
 
@@ -133,8 +134,7 @@ if __name__ == "__main__":
                                 num_workers=num_threads)
 
     # loop through data printing batch number and loss
-    labels = np.ones((batch_size,),np.float32) # all positive examples
     for idx_b, batch in enumerate(dataset_loader):
-        loss = model.forward(batch,labels)
+        loss = model.forward(batch)
         print "Loss of batch " + str(idx_b) + " is " + \
               str(loss.detach().numpy())
