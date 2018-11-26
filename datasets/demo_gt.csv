@@ -1,0 +1,16 @@
+s,r,o
+cabinet.n.01,hasAffordance,close.v.01
+cabinet.n.01,hasAffordance,close.v.01
+cabinet.n.01,hasAffordance,close.v.01
+cabinet.n.01,hasAffordance,close.v.01
+cabinet.n.01,atLocation,kitchen.n.01
+cabinet.n.01,atLocation,kitchen.n.01
+double_bed.n.01,hasAffordance,disorganize.v.01
+double_bed.n.01,hasMaterial,wood.n.01
+door.n.01,hasAffordance,open.v.01
+door.n.01,hasAffordance,open.v.01
+door.n.01,hasAffordance,close.v.01
+door.n.01,hasAffordance,close.v.01
+door.n.01,hasAffordance,close.v.01
+door.n.01,hasMaterial,wood.n.01
+door.n.01,hasMaterial,wood.n.01

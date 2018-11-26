@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 # RoboCSE imports
-from data_utils import KnowledgeTriplesDataset
+from data_utils import TrainDataset
 from models import Analogy
 from logging.viz_utils import tp
 import trained_models
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     # parses command line arguments
     args = parse_command_line()
     # sets up triples dataset
-    dataset = KnowledgeTriplesDataset(args.ds_name,args.exp_name,1,'random')
+    dataset = TrainDataset(args.ds_name,args.exp_name,1,'random')
     # sets up batch data loader
     dataset_loader = DataLoader(dataset,
                                 batch_size=args.batch_size,

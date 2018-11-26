@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch
 from torch.autograd import Variable
+import numpy as np
 
 import pdb
 
@@ -113,28 +114,85 @@ class Analogy(nn.Module):
         p_r = self.rel_im_embeddings(Variable(torch.from_numpy(batch_r)))
         # calculates the score
         score = -self._calc(p_re_s, p_im_s, p_s,
-                              p_re_o, p_im_o, p_o,
-                              p_re_r, p_im_r, p_r)
+                            p_re_o, p_im_o, p_o,
+                            p_re_r, p_im_r, p_r)
         return score.cpu()
+
+    def get_ranks(self,batch):
+        batch_s = batch[:,:,0].reshape(batch.shape[0]*batch.shape[1])
+        batch_r = batch[:,:,1].reshape(batch.shape[0]*batch.shape[1])
+        batch_o = batch[:,:,2].reshape(batch.shape[0]*batch.shape[1])
+        batch_q = batch[:,:,3].reshape(batch.shape[0]*batch.shape[1])
+        batch_y = []
+        for q_idx in xrange(len(batch_q)):
+            # sets up the query
+            if batch_q[q_idx] == 0:
+                subj = Variable(torch.from_numpy(np.arange(self.num_ents)))
+                rel = batch_r[q_idx]
+                obj = batch_o[q_idx]
+            elif batch_q[q_idx] == 1:
+                subj = batch_s[q_idx]
+                rel = Variable(torch.from_numpy(np.arange(self.num_rels)))
+                obj = batch_o[q_idx]
+            elif batch_q[q_idx] == 2:
+                subj = batch_s[q_idx]
+                rel = batch_r[q_idx]
+                obj = Variable(torch.from_numpy(np.arange(self.num_ents)))
+            # gets embeddings
+            p_re_s = self.ent_re_embeddings(subj)
+            p_im_s = self.ent_im_embeddings(subj)
+            p_s = self.ent_im_embeddings(subj)
+            p_re_o = self.ent_re_embeddings(obj)
+            p_im_o = self.ent_im_embeddings(obj)
+            p_o = self.ent_im_embeddings(obj)
+            p_re_r = self.rel_re_embeddings(rel)
+            p_im_r = self.rel_im_embeddings(rel)
+            p_r = self.rel_im_embeddings(rel)
+            # calculates the rank
+            scores = -self._calc(p_re_s, p_im_s, p_s,
+                                 p_re_o, p_im_o, p_o,
+                                 p_re_r, p_im_r, p_r)
+            ranks = np.argsort(scores.detach().numpy(),axis=0)
+            # stores the rank
+            if batch_q[q_idx] == 0:
+                batch_y.append(ranks[batch_s[q_idx]])
+            elif batch_q[q_idx] == 1:
+                batch_y.append(ranks[batch_r[q_idx]])
+            elif batch_q[q_idx] == 2:
+                batch_y.append(ranks[batch_o[q_idx]])
+        return np.asarray(batch_y)
 
 
 if __name__ == "__main__":
-    from data_utils import KnowledgeTriplesDataset
+    from data_utils import TrainDataset,PredictDataset
     from torch.utils.data import DataLoader
 
-    # creates triples dataset
-    dataset = KnowledgeTriplesDataset("demo","train",1,'random')
+    # creates triples train dataset
+    dataset = TrainDataset("demo","train",1,'random')
+
     # creates analogy model
     model = Analogy(len(dataset.e2i),len(dataset.r2i),100)
 
-    # loader batch loads triples for training
+    # batch loads triples for training
     batch_size = 2
     num_threads = 1
     dataset_loader = DataLoader(dataset,batch_size=batch_size,shuffle=False,
                                 num_workers=num_threads)
 
-    # loop through data printing batch number and loss
+    # tests forward prop with batches
+    model.train()
     for idx_b, batch in enumerate(dataset_loader):
+
         loss = model.forward(batch)
         print "Loss of batch " + str(idx_b) + " is " + \
               str(loss.detach().numpy())
+
+    # creates triples valid dataset
+    dataset = PredictDataset("demo","valid")
+    dataset_loader = DataLoader(dataset,batch_size=batch_size,shuffle=False,
+                                num_workers=num_threads)
+    # tests ranking with batches
+    model.eval()
+    for idx_b, batch in enumerate(dataset_loader):
+        ranks = model.get_ranks(batch)
+        print 'Sro,sRo,srO rank for cabinet hasAff close: ' + str(ranks)
