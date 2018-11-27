@@ -90,13 +90,30 @@ class Evaluator():
         tp('d','All hits are: \n' + str(metric[:,:,1:]))
 
 
+class Trainer():
+    def __init__(self,data_loader,optimizer,model):
+        self.data_loader = data_loader
+        self.optimizer = optimizer
+        self.model = model
+
+    def train_epoch(self):
+        total_loss = 0.0
+        for idx_b, batch in enumerate(self.data_loader):
+            self.optimizer.zero_grad()
+            loss = self.model.forward(batch)
+            total_loss += loss.detach().numpy()
+            loss.backward()
+            self.optimizer.step()
+        return total_loss
+
+
 if __name__ == "__main__":
     import torch
     from models import Analogy
     import pdb
 
 
-    va_eval = Evaluator('demo','valid',2,False,1)
+    va_eval = Evaluator('demo','ex',2,False,1)
     va_model = Analogy(len(va_eval.dataset.e2i),len(va_eval.dataset.r2i),100)
     models_fp = abspath(dirname(trained_models.__file__)) + '/'
     model_fp = models_fp + 'demo' + '_' + 'train' + '.pt'

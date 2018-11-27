@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 # RoboCSE imports
 from data_utils import TrainDataset
 from models import Analogy
-from tester import Evaluator
+from trvate_utils import Evaluator,Trainer
 from logging.viz_utils import tp
 import trained_models
 
@@ -41,6 +41,8 @@ def parse_command_line():
                         nargs='?', help='optimization Parameters')
     parser.add_argument('-e', dest='valid_freq', type=int, default=10,
                         nargs='?', help='Evaluation frequency')
+    parser.add_argument('-t', dest='train', type=int, default=1,
+                        nargs='?', help='Train=1,Test=0')
     parsed_args = parser.parse_args()
     tp('i','The current training parameters are: \n'+str(parsed_args))
     if not confirm_params():
@@ -98,6 +100,29 @@ def initialize_optimizer(method,params,model):
         raise argparse.ArgumentError
     return optimizer
 
+def training_validation_setup(cmd_args):
+    # sets up triples training dataset
+    dataset = TrainDataset(cmd_args.ds_name,cmd_args.exp_name,1,'random')
+    # sets up batch data loader
+    dataset_loader = DataLoader(dataset,
+                                batch_size=cmd_args.batch_size,
+                                shuffle=cmd_args.shuffle,
+                                num_workers=cmd_args.num_workers)
+    # sets up model
+    model = Analogy(len(dataset.e2i),len(dataset.r2i),cmd_args.d_size)
+    # sets up optimization method
+    tr_optimizer = initialize_optimizer(cmd_args.opt_method,
+                                        cmd_args.opt_params,model)
+    # sets up for training
+    tr_trainer = Trainer(dataset_loader,tr_optimizer,model)
+    # sets up for validation
+    tr_validator = Evaluator(cmd_args.ds_name,
+                             cmd_args.exp_name,
+                             cmd_args.batch_size,
+                             cmd_args.shuffle,
+                             cmd_args.num_workers)
+    return tr_trainer,tr_validator
+
 
 def save_model(dataset_name,experiment_name,params):
     models_fp = abspath(dirname(trained_models.__file__)) + '/'
@@ -110,43 +135,23 @@ def save_model(dataset_name,experiment_name,params):
 if __name__ == "__main__":
     # parses command line arguments
     args = parse_command_line()
-    # sets up triples dataset
-    dataset = TrainDataset(args.ds_name,args.exp_name,1,'random')
-    # sets up batch data loader
-    dataset_loader = DataLoader(dataset,
-                                batch_size=args.batch_size,
-                                shuffle=args.shuffle,
-                                num_workers=args.num_workers)
-    # sets up model
-    rcse = Analogy(len(dataset.e2i),len(dataset.r2i),args.d_size)
-    # sets up optimization method
-    tr_optimizer = initialize_optimizer(args.opt_method,args.opt_params,rcse)
-    # sets up for validation
-    experiment_name_list = split('_',args.exp_name)
-    if len(experiment_name_list) > 1:
-        experiment_name_list[-1] = '_valid'
-    else:
-        experiment_name_list[-1] = 'valid'
-    tr_validator = Evaluator(args.ds_name,''.join(experiment_name_list),
-                             args.batch_size,args.shuffle,args.num_workers)
+
     # sets up for visualizing evaluation
 
+    if args.train:
+        # sets up for training/validation
+        trainer,validator = training_validation_setup(args)
 
-    # training and validation loop
-    for epoch in xrange(args.num_epochs):
-        # validate
-        if epoch % args.valid_freq == 0:
-            performance = tr_validator.evaluate(rcse)
-            tp('i',"Current performance is: \n"+str(performance))
+        # training and validation loop
+        for epoch in xrange(args.num_epochs):
+            # validate
+            if epoch % args.valid_freq == 0:
+                performance = validator.evaluate(trainer.model)
+                tp('i',"Current performance is: \n"+str(performance))
 
-        # train
-        total_loss = 0.0
-        for idx_b, batch in enumerate(dataset_loader):
-            tr_optimizer.zero_grad()
-            loss = rcse.forward(batch)
-            total_loss += loss.detach().numpy()
-            loss.backward()
-            tr_optimizer.step()
-        tp('d','Total loss is ' + str(total_loss) + ' for epoch ' + str(epoch))
-    # save the trained model
-    save_model(args.ds_name,args.exp_name,rcse.state_dict())
+            # train
+            total_loss = trainer.train_epoch()
+            tp('d','Total loss is ' + str(total_loss) + ' for epoch ' + str(epoch))
+
+        # save the trained model
+        save_model(args.ds_name,args.exp_name,trainer.model.state_dict())

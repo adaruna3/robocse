@@ -168,7 +168,7 @@ if __name__ == "__main__":
     from torch.utils.data import DataLoader
 
     # creates triples train dataset
-    dataset = TrainDataset("demo","train",1,'random')
+    dataset = TrainDataset("demo","ex",1,'random')
 
     # creates analogy model
     model = Analogy(len(dataset.e2i),len(dataset.r2i),100)
@@ -188,7 +188,7 @@ if __name__ == "__main__":
               str(loss.detach().numpy())
 
     # creates triples valid dataset
-    dataset = PredictDataset("demo","valid")
+    dataset = PredictDataset("demo","ex")
     dataset_loader = DataLoader(dataset,batch_size=batch_size,shuffle=False,
                                 num_workers=num_threads)
     # tests ranking with batches

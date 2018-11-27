@@ -41,8 +41,10 @@ class TripleDataset(Dataset):
 
     def load_triples(self,dataset_name,experiment_name):
         """
-        :param csv_file: filename of triples
-        :return: loads a set of triples in a file
+
+        :param dataset_name:
+        :param experiment_name:
+        :return:
         """
         datasets_fp = abspath(dirname(datasets.__file__)) + '/'
         dataset_fp = datasets_fp + dataset_name
@@ -78,7 +80,8 @@ class TrainDataset(TripleDataset):
         :param csv_file: dataset filename
         :param root_dir: dataset filepath
         """
-        super(TrainDataset, self).__init__(dataset_name,experiment_name)
+        super(TrainDataset, self).__init__(dataset_name,
+                                           experiment_name+'_train')
         self.neg_ratio = negative_sampling_ratio
         self.neg_method = neg_sampling_method
 
@@ -132,8 +135,9 @@ class PredictDataset(TripleDataset):
         :param dataset_name:
         :param experiment_name:
         """
-        super(PredictDataset, self).__init__(dataset_name,experiment_name)
-        self.ground_truth = GT(dataset_name,experiment_name)
+        super(PredictDataset, self).__init__(dataset_name,
+                                             experiment_name+'_valid')
+        self.ground_truth = GT(dataset_name,experiment_name+'_gt')
 
     def __getitem__(self,idx):
         """
@@ -165,12 +169,7 @@ class GT:
         dataset_fp = datasets_fp + dataset_name
         ent_csv = dataset_fp + '_entities.csv'
         rel_csv = dataset_fp + '_relations.csv'
-        experiment_name_list = split('_',experiment_name)
-        if len(experiment_name_list) > 1:
-            experiment_name_list[-1] = '_gt.csv'
-        else:
-            experiment_name_list[-1] = 'gt.csv'
-        triples_csv = dataset_fp + '_' + ''.join(experiment_name_list)
+        triples_csv = dataset_fp + '_' + experiment_name + '.csv'
         self.e2i, self.i2e = self.load_id_map(ent_csv)
         self.r2i, self.i2r = self.load_id_map(rel_csv)
         # loads the ground truth data
@@ -251,7 +250,7 @@ class GT:
 
 if __name__ == "__main__":
     # creates train triples dataset
-    dataset = TrainDataset("demo","train",1,'random')
+    dataset = TrainDataset("demo","ex",1,'random')
     # loads triples for training
     batch_size = 2
     num_threads = 1
@@ -263,7 +262,7 @@ if __name__ == "__main__":
         print batch
 
     # creates valid triples dataset
-    dataset = PredictDataset("demo","valid")
+    dataset = PredictDataset("demo","ex")
     # loads triples for training
     batch_size = 2
     num_threads = 1
