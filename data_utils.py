@@ -166,8 +166,11 @@ class GT:
         ent_csv = dataset_fp + '_entities.csv'
         rel_csv = dataset_fp + '_relations.csv'
         experiment_name_list = split('_',experiment_name)
-        experiment_name_list[-1] = '_gt.csv'
-        triples_csv = dataset_fp + ''.join(experiment_name_list)
+        if len(experiment_name_list) > 1:
+            experiment_name_list[-1] = '_gt.csv'
+        else:
+            experiment_name_list[-1] = 'gt.csv'
+        triples_csv = dataset_fp + '_' + ''.join(experiment_name_list)
         self.e2i, self.i2e = self.load_id_map(ent_csv)
         self.r2i, self.i2r = self.load_id_map(rel_csv)
         # loads the ground truth data

@@ -6,13 +6,17 @@ from torch.utils.data import DataLoader
 # RoboCSE imports
 from data_utils import TrainDataset
 from models import Analogy
+from tester import Evaluator
 from logging.viz_utils import tp
 import trained_models
+
+# system imports
+import pdb
 from os.path import abspath,dirname
 import argparse
-import pdb
 from sys import stdin
 from select import select
+from re import split
 
 
 def parse_command_line():
@@ -35,6 +39,8 @@ def parse_command_line():
                         nargs='?', help='optimization Method to use')
     parser.add_argument('-p', dest='opt_params', type=float, default=1e-4,
                         nargs='?', help='optimization Parameters')
+    parser.add_argument('-e', dest='valid_freq', type=int, default=10,
+                        nargs='?', help='Evaluation frequency')
     parsed_args = parser.parse_args()
     tp('i','The current training parameters are: \n'+str(parsed_args))
     if not confirm_params():
@@ -115,13 +121,25 @@ if __name__ == "__main__":
     rcse = Analogy(len(dataset.e2i),len(dataset.r2i),args.d_size)
     # sets up optimization method
     tr_optimizer = initialize_optimizer(args.opt_method,args.opt_params,rcse)
+    # sets up for validation
+    experiment_name_list = split('_',args.exp_name)
+    if len(experiment_name_list) > 1:
+        experiment_name_list[-1] = '_valid'
+    else:
+        experiment_name_list[-1] = 'valid'
+    tr_validator = Evaluator(args.ds_name,''.join(experiment_name_list),
+                             args.batch_size,args.shuffle,args.num_workers)
+    # sets up for visualizing evaluation
 
-    # set up for evaluating training
 
-    # set up for visualizing evaluation
-
-    # runs training
+    # training and validation loop
     for epoch in xrange(args.num_epochs):
+        # validate
+        if epoch % args.valid_freq == 0:
+            performance = tr_validator.evaluate(rcse)
+            tp('i',"Current performance is: \n"+str(performance))
+
+        # train
         total_loss = 0.0
         for idx_b, batch in enumerate(dataset_loader):
             tr_optimizer.zero_grad()

@@ -30,10 +30,16 @@ class Evaluator():
         :param model: model to validate
         :return: metrics
         """
+        # set model for evaluation
+        model_was_training = model.training
+        if model_was_training:
+            model.eval()
+
         # initialize return variables
         total = np.zeros((3,len(self.dataset.r2i),1),np.float64)
         metric = np.zeros((3,len(self.dataset.r2i),4),np.float64)
-        # goes through entire test dataset
+
+        # evaluate the model over the triples set
         for idx_b, batch in enumerate(self.dataset_loader):
                 m1_o = batch[:,:,4].flatten()
                 m2_o = model.get_ranks(batch)
@@ -57,6 +63,10 @@ class Evaluator():
                         total[idx_q,idx_r,0] += len(idxs[0])  # increases total
                 # debug prints
                 #self.debug_output(batch,hits,metric,total)
+
+        # set model back to previous state
+        if model_was_training:
+            model.train()
         return metric/total
 
     def get_amrr(self,o1,o2):
