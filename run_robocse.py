@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from data_utils import TrainDataset
 from models import Analogy
 from trvate_utils import Evaluator,Trainer
-from logging.viz_utils import tp
+from robocse_logging.viz_utils import tp,RoboCSETrainViz
 import trained_models
 
 # system imports
@@ -136,22 +136,23 @@ if __name__ == "__main__":
     # parses command line arguments
     args = parse_command_line()
 
-    # sets up for visualizing evaluation
-
     if args.train:
         # sets up for training/validation
         trainer,validator = training_validation_setup(args)
+        # sets up for visualizing training/validation
+        viz = RoboCSETrainViz(validator.dataset.i2r.values())
 
         # training and validation loop
         for epoch in xrange(args.num_epochs):
+            # train
+            total_loss = trainer.train_epoch()
+            tp('d','Total loss is ' + str(total_loss) + ' for epoch ' + str(epoch))
+
             # validate
             if epoch % args.valid_freq == 0:
                 performance = validator.evaluate(trainer.model)
                 tp('i',"Current performance is: \n"+str(performance))
-
-            # train
-            total_loss = trainer.train_epoch()
-            tp('d','Total loss is ' + str(total_loss) + ' for epoch ' + str(epoch))
+                viz.update(performance,total_loss)
 
         # save the trained model
         save_model(args.ds_name,args.exp_name,trainer.model.state_dict())

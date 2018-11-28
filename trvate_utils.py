@@ -1,7 +1,7 @@
 import trained_models
 from os.path import abspath,dirname
 import numpy as np
-from logging.viz_utils import tp
+from robocse_logging.viz_utils import tp
 from data_utils import PredictDataset
 from torch.utils.data import DataLoader
 

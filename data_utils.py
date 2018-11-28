@@ -2,7 +2,7 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
 from os.path import abspath,dirname
-from logging.viz_utils import tp
+from robocse_logging.viz_utils import tp
 import datasets
 from re import split
 
