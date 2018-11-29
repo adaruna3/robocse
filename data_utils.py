@@ -88,7 +88,7 @@ class TrainDataset(TripleDataset):
     def __getitem__(self,idx):
         """
         :param idx: indexes of triples to return
-        :return: training triples sample
+        :return: training triples sample (s,r,o,y)
         """
         samples = np.reshape(np.append(self.sros[idx,:],[1]),(1,4))
         for i in xrange(self.neg_ratio):
@@ -136,24 +136,21 @@ class PredictDataset(TripleDataset):
         :param experiment_name:
         """
         super(PredictDataset, self).__init__(dataset_name,
-                                             experiment_name+'_valid')
-        self.ground_truth = GT(dataset_name,experiment_name+'_gt')
+                                             experiment_name)
+        experiment_name_list = split('_',experiment_name)
+        experiment_name_list[-1] = '_gt'
+        self.ground_truth = GT(dataset_name,''.join(experiment_name_list))
 
     def __getitem__(self,idx):
         """
         :param idx: indexes of triples to return
-        :return: training triples sample
+        :return: training triples sample (s,r,o,y,q,y')
         """
-        samples = np.empty((0,5),dtype=int)
+        samples = np.empty((0,6),dtype=int)
         for q_idx in xrange(3):
-            true_rank = self.ground_truth.get_ranks(q_idx,
-                                                    self.sros[idx,0],
-                                                    self.sros[idx,1],
-                                                    self.sros[idx,2])
-            sample = np.append(np.append(self.sros[idx,:],[q_idx]),[true_rank])
-            samples = np.append(samples,
-                                np.reshape(sample,(1,5)),
-                                axis=0)
+            true_rank = self.ground_truth.get_ranks(q_idx,self.sros[idx,:])
+            sample = np.append(self.sros[idx,:],[1,q_idx,true_rank],axis=0)
+            samples = np.append(samples,np.reshape(sample,(1,6)),axis=0)
         return samples
 
 
@@ -226,7 +223,8 @@ class GT:
             outputs = np.append(ids,outputs,1)
         return outputs
 
-    def get_ranks(self,qtype,subj,rel,obj):
+    def get_ranks(self,qtype,triple):
+        subj,rel,obj = triple
         if qtype == 0:
             outputs = self.score(None,rel,obj)
             scores = outputs[:,1]
@@ -250,7 +248,9 @@ class GT:
 
 if __name__ == "__main__":
     # creates train triples dataset
-    dataset = TrainDataset("demo","ex",1,'random')
+    dataset_name = 'demo'
+    experiment_name = 'ex'
+    dataset = TrainDataset(dataset_name,experiment_name,1,'random')
     # loads triples for training
     batch_size = 2
     num_threads = 1
@@ -262,7 +262,8 @@ if __name__ == "__main__":
         print batch
 
     # creates valid triples dataset
-    dataset = PredictDataset("demo","ex")
+    dataset = PredictDataset(dataset_name,experiment_name+'_valid')
+    print dataset[0]
     # loads triples for training
     batch_size = 2
     num_threads = 1

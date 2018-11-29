@@ -26,12 +26,9 @@ def tp(p_type,msg,update=0):
             print start + msg
 
 class RoboCSETrainViz():
-    def __init__(self,legend,amrr_idx=0,hits_idx=2):
+    def __init__(self,viz,title_front,legend,amrr_idx=0,hits_idx=2):
         # connect to the Visdom server
-        self.viz = Visdom()
-        assert self.viz.check_connection(),'Start Visdom!'
-        # clears main environment
-        self.viz.close()
+        self.viz = viz
         # initialize the visualization arrays
         self.hits = np.empty(shape=(3,len(legend),0))
         self.amrr = np.empty(shape=(3,len(legend),0))
@@ -42,6 +39,7 @@ class RoboCSETrainViz():
         self.wins = []
         self.initial_update = True
         self.legend = legend
+        self.pre_title = title_front
 
     def update(self,metric,loss):
         append_shape = (self.hits.shape[0],self.hits.shape[1],1)
@@ -61,19 +59,19 @@ class RoboCSETrainViz():
             for i in xrange(7):
                 if i < 3:
                     x_axis = np.full_like(amrr_append[i].T,append_idx)
-                    title = 'AMRR ' + title_ending[i]
+                    title = self.pre_title + ' AMRR ' + title_ending[i]
                     self.wins.append(self.viz.line(X=x_axis,
                                                    Y=amrr_append[i].T,
                                                    opts=dict(title=title),))
                 elif i < 4:
                     x_axis = np.full_like(loss_append.T,append_idx)
-                    title = 'Total Epoch Loss'
+                    title = self.pre_title + ' Total Epoch Loss'
                     self.wins.append(self.viz.line(X=x_axis,
                                                    Y=loss_append.T,
                                                    opts=dict(title=title),))
                 else:
                     x_axis = np.full_like(hits_append[(i+2)%3].T,append_idx)
-                    title = 'Hits@5 ' + title_ending[(i+2)%3]
+                    title = self.pre_title + ' Hits@5 ' + title_ending[(i+2)%3]
                     self.wins.append(self.viz.line(X=x_axis,
                                                    Y=hits_append[(i+2)%3].T,
                                                    opts=dict(title=title),))
@@ -101,12 +99,29 @@ class RoboCSETrainViz():
                                   update='append',
                                   opts=opts)
 
+
+def valid_visualization_setup(train_evaluator,valid_evaluator):
+    viz_server = Visdom()
+    assert viz_server.check_connection(),'Start Visdom!'
+    viz_server.close()
+    train_viz = RoboCSETrainViz(viz_server,
+                                'Train',
+                                train_evaluator.dataset.i2r.values())
+    valid_viz = RoboCSETrainViz(viz_server,
+                                'Valid',
+                                valid_evaluator.dataset.i2r.values())
+    # clears main environment
+    return train_viz,valid_viz
+
+
 if __name__ == "__main__":
     from time import sleep
-    import pdb
 
+    visdom_server = Visdom()
+    assert visdom_server.check_connection(),'Start Visdom!'
+    visdom_server.close()
     number_of_relation_types = 3
-    tr_viz = RoboCSETrainViz(['Loc','Mat','Aff'])
+    tr_viz = RoboCSETrainViz(visdom_server,'Example',['Loc','Mat','Aff'])
     for i in xrange(3):
         tr_viz.update(np.random.uniform(size=(3,number_of_relation_types,4)),
                       np.random.randint(10))

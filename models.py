@@ -122,7 +122,7 @@ class Analogy(nn.Module):
         batch_s = batch[:,:,0].reshape(batch.shape[0]*batch.shape[1])
         batch_r = batch[:,:,1].reshape(batch.shape[0]*batch.shape[1])
         batch_o = batch[:,:,2].reshape(batch.shape[0]*batch.shape[1])
-        batch_q = batch[:,:,3].reshape(batch.shape[0]*batch.shape[1])
+        batch_q = batch[:,:,4].reshape(batch.shape[0]*batch.shape[1])
         batch_y = []
         for q_idx in xrange(len(batch_q)):
             # sets up the query
@@ -168,7 +168,9 @@ if __name__ == "__main__":
     from torch.utils.data import DataLoader
 
     # creates triples train dataset
-    dataset = TrainDataset("demo","ex",1,'random')
+    dataset_name = 'demo'
+    experiment_name = 'ex'
+    dataset = TrainDataset(dataset_name,experiment_name,1,'random')
 
     # creates analogy model
     model = Analogy(len(dataset.e2i),len(dataset.r2i),100)
@@ -188,7 +190,7 @@ if __name__ == "__main__":
               str(loss.detach().numpy())
 
     # creates triples valid dataset
-    dataset = PredictDataset("demo","ex")
+    dataset = PredictDataset(dataset_name,experiment_name+'_valid')
     dataset_loader = DataLoader(dataset,batch_size=batch_size,shuffle=False,
                                 num_workers=num_threads)
     # tests ranking with batches
