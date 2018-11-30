@@ -41,7 +41,7 @@ class RoboCSETrainViz():
         self.legend = legend
         self.pre_title = title_front
 
-    def update(self,metric,loss):
+    def update(self,metric,loss,epoch):
         append_shape = (self.hits.shape[0],self.hits.shape[1],1)
         hits_append = metric[:,:,self.hits_idx].reshape(append_shape)
         amrr_append = metric[:,:,self.amrr_idx].reshape(append_shape)
@@ -50,7 +50,6 @@ class RoboCSETrainViz():
         self.hits = np.append(self.hits,hits_append,axis=2)
         self.amrr = np.append(self.amrr,amrr_append,axis=2)
         self.loss = np.append(self.loss,loss_append,axis=1)
-        append_idx = self.loss.shape[1]
         # initial update
         if self.initial_update:
             # initialize windows and plot
@@ -58,19 +57,19 @@ class RoboCSETrainViz():
             title_ending = {0:"Sro",1:"sRo",2:"srO"}
             for i in xrange(7):
                 if i < 3:
-                    x_axis = np.full_like(amrr_append[i].T,append_idx)
+                    x_axis = np.full_like(amrr_append[i].T,epoch)
                     title = self.pre_title + ' AMRR ' + title_ending[i]
                     self.wins.append(self.viz.line(X=x_axis,
                                                    Y=amrr_append[i].T,
                                                    opts=dict(title=title),))
                 elif i < 4:
-                    x_axis = np.full_like(loss_append.T,append_idx)
+                    x_axis = np.full_like(loss_append.T,epoch)
                     title = self.pre_title + ' Total Epoch Loss'
                     self.wins.append(self.viz.line(X=x_axis,
                                                    Y=loss_append.T,
                                                    opts=dict(title=title),))
                 else:
-                    x_axis = np.full_like(hits_append[(i+2)%3].T,append_idx)
+                    x_axis = np.full_like(hits_append[(i+2)%3].T,epoch)
                     title = self.pre_title + ' Hits@5 ' + title_ending[(i+2)%3]
                     self.wins.append(self.viz.line(X=x_axis,
                                                    Y=hits_append[(i+2)%3].T,
@@ -80,20 +79,20 @@ class RoboCSETrainViz():
             for i in xrange(7):
                 if i < 3:
                     opts = dict(legend=self.legend)
-                    self.viz.line(X=np.full_like(amrr_append[i].T,append_idx),
+                    self.viz.line(X=np.full_like(amrr_append[i].T,epoch),
                                   Y=amrr_append[i].T,
                                   win=self.wins[i],
                                   update='append',
                                   opts=opts)
                 elif i < 4:
                     opts = dict(legend=self.legend)
-                    self.viz.line(X=np.full_like(loss_append.T,append_idx),
+                    self.viz.line(X=np.full_like(loss_append.T,epoch),
                                   Y=loss_append.T,
                                   win=self.wins[i],
                                   update='append')
                 else:
                     opts = dict(legend=self.legend)
-                    self.viz.line(X=np.full_like(hits_append[(i+2)%3].T,append_idx),
+                    self.viz.line(X=np.full_like(hits_append[(i+2)%3].T,epoch),
                                   Y=hits_append[(i+2)%3].T,
                                   win=self.wins[i],
                                   update='append',

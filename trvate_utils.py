@@ -11,7 +11,10 @@ from data_utils import TrainDataset
 
 from copy import copy
 
-class Evaluator():
+import pdb
+
+
+class Evaluator:
     def __init__(self,
                  dataset_name,
                  experiment_name,
@@ -100,7 +103,7 @@ class Evaluator():
         tp('d','All hits are: \n' + str(metric[:,:,1:]))
 
 
-class Trainer():
+class Trainer:
     def __init__(self,data_loader,optimizer,model):
         self.data_loader = data_loader
         self.optimizer = optimizer
@@ -135,7 +138,10 @@ def validation_setup(cmd_args):
 
 def training_setup(cmd_args):
     # sets up triples training dataset
-    dataset = TrainDataset(cmd_args.ds_name,cmd_args.exp_name,1,'random')
+    dataset = TrainDataset(cmd_args.ds_name,
+                           cmd_args.exp_name,
+                           cmd_args.neg_ratio,
+                           cmd_args.neg_method)
     # sets up batch data loader
     dataset_loader = DataLoader(dataset,
                                 batch_size=cmd_args.batch_size,
@@ -157,7 +163,7 @@ def initialize_optimizer(method,params,model):
         try:
             lr,lr_decay,weight_decay = params
         except ValueError as e:
-            tp('w','Parameters for adagrad are "-p lr lr_decay weight_decay"')
+            tp('w','Parameters for adagrad are "-p (lr,lr_decay,weight_decay)"')
             raise ArgumentError
         optimizer = optim.Adagrad(model.parameters(),
                                   lr=lr,
@@ -191,7 +197,7 @@ def initialize_optimizer(method,params,model):
 
 
 if __name__ == "__main__":
-    class example_args():
+    class example_args:
         def __init__(self):
             self.ds_name = 'demo'
             self.exp_name = 'ex'
@@ -208,8 +214,8 @@ if __name__ == "__main__":
     temp_args = example_args()
     # check training
     trainer = training_setup(temp_args)
-    total_loss = trainer.train_epoch()
-    tp('s','Model trained!: ' + str(total_loss))
+    tl = trainer.train_epoch()
+    tp('s','Model trained!: ' + str(tl))
     # check evaluation
     tr_eval,va_eval = validation_setup(temp_args)
     tr_performance,tr_loss = tr_eval.evaluate(trainer.model)

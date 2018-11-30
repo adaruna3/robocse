@@ -138,8 +138,8 @@ class PredictDataset(TripleDataset):
         super(PredictDataset, self).__init__(dataset_name,
                                              experiment_name)
         experiment_name_list = split('_',experiment_name)
-        experiment_name_list[-1] = '_gt'
-        self.ground_truth = GT(dataset_name,''.join(experiment_name_list))
+        experiment_name_list[-1] = 'gt'
+        self.ground_truth = GT(dataset_name,'_'.join(experiment_name_list))
 
     def __getitem__(self,idx):
         """
@@ -263,7 +263,6 @@ if __name__ == "__main__":
 
     # creates valid triples dataset
     dataset = PredictDataset(dataset_name,experiment_name+'_valid')
-    print dataset[0]
     # loads triples for training
     batch_size = 2
     num_threads = 1

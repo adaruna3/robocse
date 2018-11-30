@@ -22,7 +22,7 @@ def parse_command_line():
                         help='EXPeriment name for train,valid, & test')
     parser.add_argument('-b', dest='batch_size', type=int, default=50,
                         nargs='?', help='Batch size')
-    parser.add_argument('-n', dest='num_workers', type=int, default=8,
+    parser.add_argument('-n', dest='num_workers', type=int, default=32,
                         nargs='?', help='Number of training threads')
     parser.add_argument('-s', dest='shuffle', type=int, default=0,
                         nargs='?', help='Shuffle bathces flag')
@@ -33,13 +33,18 @@ def parse_command_line():
     parser.add_argument('-m', dest='opt_method', type=str, default='sgd',
                         nargs='?', help='optimization Method to use')
     parser.add_argument('-p', dest='opt_params', type=float, default=1e-4,
-                        nargs='?', help='optimization Parameters')
+                        nargs='+', help='optimization Parameters')
     parser.add_argument('-e', dest='valid_freq', type=int, default=10,
                         nargs='?', help='Evaluation frequency')
     parser.add_argument('-t', dest='train', type=int, default=1,
                         nargs='?', help='Train=1,Test=0')
     parser.add_argument('-c', dest='batch_cutoff', type=int, default=None,
+                        nargs='?', help='Negative sampling Ratio')
+    parser.add_argument('-nr', dest='neg_ratio', type=int, default=9,
                         nargs='?', help='Cutoff for training visualization')
+    parser.add_argument('-nm', dest='neg_method', type=str, default='random',
+                        nargs='?', help='Negative sampling Method')
+
     parsed_args = parser.parse_args()
     tp('i','The current training parameters are: \n'+str(parsed_args))
     if not confirm_params():
@@ -79,16 +84,15 @@ if __name__ == "__main__":
         tr_eval,va_eval = validation_setup(args)
         # sets up for visualizing training/validation
         tr_viz,va_viz = valid_visualization_setup(tr_eval,va_eval)
-
         # training and validation loop
         for epoch in xrange(args.num_epochs):
             # validate and display
             if epoch % args.valid_freq == 0:
                 tr_performance,tr_loss = tr_eval.evaluate(trainer.model)
                 va_performance,va_loss = va_eval.evaluate(trainer.model)
-
-                tr_viz.update(tr_performance,tr_loss)
-                va_viz.update(va_performance,va_loss)
+                print tr_performance
+                tr_viz.update(tr_performance,tr_loss,epoch)
+                va_viz.update(va_performance,va_loss,epoch)
 
             # train
             total_loss = trainer.train_epoch()
