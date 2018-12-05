@@ -1,6 +1,8 @@
 from visdom import Visdom
 import numpy as np
 
+import pdb
+
 
 type2color = {
     's': ' \033[95mSuccess:\033[0m ',
@@ -26,13 +28,15 @@ def tp(p_type,msg,update=0):
             print start + msg
 
 class RoboCSETrainViz():
-    def __init__(self,viz,title_front,legend,amrr_idx=0,hits_idx=2):
+    def __init__(self,title_front,legend,amrr_idx=0,hits_idx=2):
         # connect to the Visdom server
-        self.viz = viz
+        self.viz = Visdom()
+        assert self.viz.check_connection(),'Start Visdom!'
         # initialize the visualization arrays
         self.hits = np.empty(shape=(3,len(legend),0))
         self.amrr = np.empty(shape=(3,len(legend),0))
         self.loss = np.empty(shape=(1,0))
+        self.epoch = np.empty(shape=(1,0))
         self.amrr_idx = amrr_idx
         self.hits_idx = hits_idx
         # plot the initial metrics and loss
@@ -42,60 +46,67 @@ class RoboCSETrainViz():
         self.pre_title = title_front
 
     def update(self,metric,loss,epoch):
+        # reshapes for logging
         append_shape = (self.hits.shape[0],self.hits.shape[1],1)
         hits_append = metric[:,:,self.hits_idx].reshape(append_shape)
         amrr_append = metric[:,:,self.amrr_idx].reshape(append_shape)
         loss_append = np.asarray(loss).reshape((1,1))
-        # store logged values
+        epoch_append = np.asarray(epoch).reshape((1,1))
+        # logs the values
         self.hits = np.append(self.hits,hits_append,axis=2)
         self.amrr = np.append(self.amrr,amrr_append,axis=2)
         self.loss = np.append(self.loss,loss_append,axis=1)
+        self.epoch = np.append(self.epoch,epoch_append,axis=1)
+        title_ending = {0:"Sro",1:"sRo",2:"srO"}
         # initial update
         if self.initial_update:
             # initialize windows and plot
             self.initial_update = False
-            title_ending = {0:"Sro",1:"sRo",2:"srO"}
             for i in xrange(7):
                 if i < 3:
-                    x_axis = np.full_like(amrr_append[i].T,epoch)
+                    x_axis = np.repeat(self.epoch.T, 3, axis=1)
                     title = self.pre_title + ' AMRR ' + title_ending[i]
                     self.wins.append(self.viz.line(X=x_axis,
-                                                   Y=amrr_append[i].T,
+                                                   Y=self.amrr[i].T,
                                                    opts=dict(title=title),))
                 elif i < 4:
-                    x_axis = np.full_like(loss_append.T,epoch)
+                    x_axis = self.epoch.T
                     title = self.pre_title + ' Total Epoch Loss'
                     self.wins.append(self.viz.line(X=x_axis,
-                                                   Y=loss_append.T,
+                                                   Y=self.loss.T,
                                                    opts=dict(title=title),))
                 else:
-                    x_axis = np.full_like(hits_append[(i+2)%3].T,epoch)
+                    x_axis = np.repeat(self.epoch.T, 3, axis=1)
                     title = self.pre_title + ' Hits@5 ' + title_ending[(i+2)%3]
                     self.wins.append(self.viz.line(X=x_axis,
-                                                   Y=hits_append[(i+2)%3].T,
+                                                   Y=self.hits[(i+2)%3].T,
                                                    opts=dict(title=title),))
         else:
             # update plots
             for i in xrange(7):
                 if i < 3:
-                    opts = dict(legend=self.legend)
-                    self.viz.line(X=np.full_like(amrr_append[i].T,epoch),
-                                  Y=amrr_append[i].T,
+                    x_axis = np.repeat(self.epoch.T, 3, axis=1)
+                    title = self.pre_title + ' AMRR ' + title_ending[i]
+                    opts = dict(legend=self.legend,title=title)
+                    self.viz.line(X=x_axis,
+                                  Y=self.amrr[i].T,
                                   win=self.wins[i],
-                                  update='append',
                                   opts=opts)
                 elif i < 4:
-                    opts = dict(legend=self.legend)
-                    self.viz.line(X=np.full_like(loss_append.T,epoch),
-                                  Y=loss_append.T,
+                    x_axis = self.epoch.T
+                    title = self.pre_title + ' Total Epoch Loss'
+                    opts = dict(title=title)
+                    self.viz.line(X=x_axis,
+                                  Y=self.loss.T,
                                   win=self.wins[i],
-                                  update='append')
+                                  opts=opts)
                 else:
-                    opts = dict(legend=self.legend)
-                    self.viz.line(X=np.full_like(hits_append[(i+2)%3].T,epoch),
-                                  Y=hits_append[(i+2)%3].T,
+                    x_axis = np.repeat(self.epoch.T, 3, axis=1)
+                    title = self.pre_title + ' Hits@5 ' + title_ending[(i+2)%3]
+                    opts = dict(legend=self.legend,title=title)
+                    self.viz.line(X=x_axis,
+                                  Y=self.hits[(i+2)%3].T,
                                   win=self.wins[i],
-                                  update='append',
                                   opts=opts)
 
 
@@ -103,11 +114,9 @@ def valid_visualization_setup(train_evaluator,valid_evaluator):
     viz_server = Visdom()
     assert viz_server.check_connection(),'Start Visdom!'
     viz_server.close()
-    train_viz = RoboCSETrainViz(viz_server,
-                                'Train',
+    train_viz = RoboCSETrainViz('Train',
                                 train_evaluator.dataset.i2r.values())
-    valid_viz = RoboCSETrainViz(viz_server,
-                                'Valid',
+    valid_viz = RoboCSETrainViz('Valid',
                                 valid_evaluator.dataset.i2r.values())
     # clears main environment
     return train_viz,valid_viz

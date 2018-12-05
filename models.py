@@ -7,7 +7,7 @@ import pdb
 
 
 class Analogy(nn.Module):
-    def __init__(self,num_ents,num_rels,hidden_size,lmbda=0.0):
+    def __init__(self,num_ents,num_rels,hidden_size,device,lmbda=0.0):
         """
         Creates an analogy model object
         :param num_ents: total number of entities
@@ -20,13 +20,20 @@ class Analogy(nn.Module):
         self.num_rels = num_rels
         self.hidden_size = hidden_size
         self.lmbda = lmbda
-        self.ent_im_embeddings = nn.Embedding(num_ents,hidden_size/2)
-        self.ent_re_embeddings = nn.Embedding(num_ents,hidden_size/2)
-        self.rel_re_embeddings = nn.Embedding(num_rels,hidden_size/2)
-        self.rel_im_embeddings = nn.Embedding(num_rels,hidden_size/2)
-        self.ent_embeddings = nn.Embedding(num_ents, hidden_size)
-        self.rel_embeddings = nn.Embedding(num_rels, hidden_size)
-        self.softplus = nn.Softplus()
+        self.device = device
+        self.ent_im_embeddings = \
+            nn.Embedding(num_ents,hidden_size/2).to(self.device)
+        self.ent_re_embeddings = \
+            nn.Embedding(num_ents,hidden_size/2).to(self.device)
+        self.rel_re_embeddings = \
+            nn.Embedding(num_rels,hidden_size/2).to(self.device)
+        self.rel_im_embeddings = \
+            nn.Embedding(num_rels,hidden_size/2).to(self.device)
+        self.ent_embeddings = \
+            nn.Embedding(num_ents, hidden_size).to(self.device)
+        self.rel_embeddings = \
+            nn.Embedding(num_rels, hidden_size).to(self.device)
+        self.softplus = nn.Softplus().to(self.device)
         self.init_embeddings()
 
     def init_embeddings(self):
@@ -127,17 +134,20 @@ class Analogy(nn.Module):
         for q_idx in xrange(len(batch_q)):
             # sets up the query
             if batch_q[q_idx] == 0:
-                subj = Variable(torch.from_numpy(np.arange(self.num_ents)))
+                subj = Variable(torch.from_numpy(
+                    np.arange(self.num_ents))).to(self.device)
                 rel = batch_r[q_idx]
                 obj = batch_o[q_idx]
             elif batch_q[q_idx] == 1:
                 subj = batch_s[q_idx]
-                rel = Variable(torch.from_numpy(np.arange(self.num_rels)))
+                rel = Variable(torch.from_numpy(
+                    np.arange(self.num_rels))).to(self.device)
                 obj = batch_o[q_idx]
             elif batch_q[q_idx] == 2:
                 subj = batch_s[q_idx]
                 rel = batch_r[q_idx]
-                obj = Variable(torch.from_numpy(np.arange(self.num_ents)))
+                obj = Variable(torch.from_numpy(
+                    np.arange(self.num_ents))).to(self.device)
             # gets embeddings
             p_re_s = self.ent_re_embeddings(subj)
             p_im_s = self.ent_im_embeddings(subj)
@@ -152,7 +162,7 @@ class Analogy(nn.Module):
             scores = -self._calc(p_re_s, p_im_s, p_s,
                                  p_re_o, p_im_o, p_o,
                                  p_re_r, p_im_r, p_r)
-            ranks = np.argsort(scores.detach().numpy(),axis=0)
+            ranks = np.argsort(scores.cpu().detach().numpy(),axis=0)
             # stores the rank
             if batch_q[q_idx] == 0:
                 batch_y.append(ranks[batch_s[q_idx]])

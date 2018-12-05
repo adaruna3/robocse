@@ -21,6 +21,7 @@ class Evaluator:
                  batch_size,
                  shuffle,
                  num_workers,
+                 device,
                  batch_cutoff=None):
         """
         :param dataset_name:
@@ -32,6 +33,7 @@ class Evaluator:
                                          shuffle=shuffle,
                                          num_workers=num_workers)
         self.cutoff = batch_cutoff
+        self.device = device
 
     def evaluate(self,model):
         """
@@ -40,9 +42,9 @@ class Evaluator:
         :return: metrics
         """
         # set model for evaluation
-        model_was_training = model.training
-        if model_was_training:
-            model.eval()
+        #model_was_training = model.training
+        #if model_was_training:
+        #    model.eval()
 
         # initialize return variables
         num_samples = np.zeros((3,len(self.dataset.r2i),1),np.float64)
@@ -54,31 +56,45 @@ class Evaluator:
             if (self.cutoff is not None) and (idx_b > self.cutoff):
                 break  # break if not going through all batches
             # gets total loss
-            total_loss += model.forward(batch).detach().numpy()
+            loss = copy(model.forward(batch.to(self.device)).cpu())
+            total_loss += loss.detach().numpy()
+
             # gets AMMR and Hits@X* metrics
             m1_o = batch[:,:,5].flatten()
-            m2_o = model.get_ranks(batch)
+            m2_o = model.get_ranks(batch.to(self.device))
             amrr = self.get_amrr(m1_o.numpy(),m2_o)
             hits = abs(m1_o.numpy()-m2_o)
             # store results
             for idx_q in xrange(3):
-                for idx_r in xrange(len(self.dataset.r2i)):
-                    idxs = np.logical_and((batch[:,:,1].flatten()==idx_r),
-                                          (batch[:,:,4].flatten()==idx_q))
-                    idxs = np.where(idxs)
-                    metric[idx_q,idx_r,0] += \
+                if idx_q == 1:  # handles sRo queries
+                    idxs = np.where(batch[:,:,4].flatten()==idx_q)
+                    metric[idx_q,:,0] += \
                         np.sum(amrr[idxs[0]])  # AMRR
-                    metric[idx_q,idx_r,1] += \
+                    metric[idx_q,:,1] += \
                         np.count_nonzero(hits[idxs[0]]<=10)  # Hits@10
-                    metric[idx_q,idx_r,2] += \
+                    metric[idx_q,:,2] += \
                         np.count_nonzero(hits[idxs[0]]<=5)  # Hits@5
-                    metric[idx_q,idx_r,3] += \
+                    metric[idx_q,:,3] += \
                         np.count_nonzero(hits[idxs[0]]<=1)  # Hits@1
-                    num_samples[idx_q,idx_r,0] += len(idxs[0])
+                    num_samples[idx_q,:,0] += len(idxs[0])
+                else:
+                    for idx_r in xrange(len(self.dataset.r2i)):
+                        idxs = np.logical_and((batch[:,:,1].flatten()==idx_r),
+                                              (batch[:,:,4].flatten()==idx_q))
+                        idxs = np.where(idxs)
+                        metric[idx_q,idx_r,0] += \
+                            np.sum(amrr[idxs[0]])  # AMRR
+                        metric[idx_q,idx_r,1] += \
+                            np.count_nonzero(hits[idxs[0]]<=10)  # Hits@10
+                        metric[idx_q,idx_r,2] += \
+                            np.count_nonzero(hits[idxs[0]]<=5)  # Hits@5
+                        metric[idx_q,idx_r,3] += \
+                            np.count_nonzero(hits[idxs[0]]<=1)  # Hits@1
+                        num_samples[idx_q,idx_r,0] += len(idxs[0])
 
         # set model back to previous state
-        if model_was_training:
-            model.train()
+        #if model_was_training:
+        #    model.train()
 
         return metric/num_samples, total_loss
 
@@ -104,17 +120,18 @@ class Evaluator:
 
 
 class Trainer:
-    def __init__(self,data_loader,optimizer,model):
+    def __init__(self,data_loader,optimizer,model,device):
         self.data_loader = data_loader
         self.optimizer = optimizer
         self.model = model
+        self.device = device
 
     def train_epoch(self):
         total_loss = 0.0
         for idx_b, batch in enumerate(self.data_loader):
             self.optimizer.zero_grad()
-            loss = self.model.forward(batch)
-            total_loss += loss.detach().numpy()
+            loss = self.model.forward(batch.to(self.device))
+            total_loss += loss.cpu().detach().numpy()
             loss.backward()
             self.optimizer.step()
         return total_loss
@@ -127,12 +144,14 @@ def validation_setup(cmd_args):
                              cmd_args.batch_size,
                              cmd_args.shuffle,
                              cmd_args.num_workers,
+                             cmd_args.device,
                              cmd_args.batch_cutoff)
     va_evaluator = Evaluator(cmd_args.ds_name,
                              cmd_args.exp_name+'_valid',
                              cmd_args.batch_size,
                              cmd_args.shuffle,
-                             cmd_args.num_workers)
+                             cmd_args.num_workers,
+                             cmd_args.device)
     return tr_evaluator,va_evaluator
 
 
@@ -148,12 +167,15 @@ def training_setup(cmd_args):
                                 shuffle=cmd_args.shuffle,
                                 num_workers=cmd_args.num_workers)
     # sets up model
-    model = Analogy(len(dataset.e2i),len(dataset.r2i),cmd_args.d_size)
+    model = Analogy(len(dataset.e2i),
+                    len(dataset.r2i),
+                    cmd_args.d_size,
+                    cmd_args.device)
     # sets up optimization method
     tr_optimizer = initialize_optimizer(cmd_args.opt_method,
                                         cmd_args.opt_params,model)
     # sets up for training
-    tr_trainer = Trainer(dataset_loader,tr_optimizer,model)
+    tr_trainer = Trainer(dataset_loader,tr_optimizer,model,cmd_args.device)
 
     return tr_trainer
 
@@ -171,21 +193,21 @@ def initialize_optimizer(method,params,model):
                                   weight_decay=weight_decay)
     elif method == "adadelta":
         try:
-            lr = params
+            lr = params[0]
         except ValueError as e:
             tp('f','Parameters for adadelta are "-p lr"')
             raise ArgumentError
         optimizer = optim.Adadelta(model.parameters(), lr=lr)
     elif method == "adam":
         try:
-            lr,lr_decay,weight_decay = params
+            lr = params[0]
         except ValueError as e:
             tp('f','Parameters for adam are "-p lr"')
             raise ArgumentError
         optimizer = optim.Adam(model.parameters(), lr=lr)
     elif method == "sgd":
         try:
-            lr= params
+            lr= params[0]
         except ValueError as e:
             tp('f','Parameters for sgd are "-p lr"')
             raise ArgumentError

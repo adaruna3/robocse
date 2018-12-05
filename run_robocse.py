@@ -1,5 +1,5 @@
 # torch imports
-from torch import save
+import torch
 
 # RoboCSE imports
 from trvate_utils import training_setup,validation_setup
@@ -12,6 +12,7 @@ from os.path import abspath,dirname
 import argparse
 from sys import stdin
 from select import select
+from numpy import mean
 
 
 def parse_command_line():
@@ -20,7 +21,7 @@ def parse_command_line():
                         help='DataSet name')
     parser.add_argument('exp_name', type=str,
                         help='EXPeriment name for train,valid, & test')
-    parser.add_argument('-b', dest='batch_size', type=int, default=50,
+    parser.add_argument('-bs', dest='batch_size', type=int, default=50,
                         nargs='?', help='Batch size')
     parser.add_argument('-n', dest='num_workers', type=int, default=32,
                         nargs='?', help='Number of training threads')
@@ -38,12 +39,14 @@ def parse_command_line():
                         nargs='?', help='Evaluation frequency')
     parser.add_argument('-t', dest='train', type=int, default=1,
                         nargs='?', help='Train=1,Test=0')
-    parser.add_argument('-c', dest='batch_cutoff', type=int, default=None,
+    parser.add_argument('-bc', dest='batch_cutoff', type=int, default=None,
                         nargs='?', help='Negative sampling Ratio')
     parser.add_argument('-nr', dest='neg_ratio', type=int, default=9,
                         nargs='?', help='Cutoff for training visualization')
     parser.add_argument('-nm', dest='neg_method', type=str, default='random',
                         nargs='?', help='Negative sampling Method')
+    parser.add_argument('-c', dest='cuda', type=int, default=1,
+                        nargs='?', help='Run on GPU?')
 
     parsed_args = parser.parse_args()
     tp('i','The current training parameters are: \n'+str(parsed_args))
@@ -65,17 +68,26 @@ def confirm_params():
         return True
 
 
-def save_model(dataset_name,experiment_name,params):
-    models_fp = abspath(dirname(trained_models.__file__)) + '/'
-    model_fp = models_fp + dataset_name + '_' + experiment_name + '.pt'
-    save(params,model_fp)
-    tp('s','model for experiment ' + experiment_name + ' on ' + dataset_name + \
-       'trained and saved successfully.')
-    tp('s','Written to: '+model_fp)
+def save_model(dataset_name,experiment_name,params,current,best):
+    mrr = mean(current[0,:,1]+current[2,:,1])
+    if mrr > best:
+        best = mrr
+        models_fp = abspath(dirname(trained_models.__file__)) + '/'
+        model_fp = models_fp + dataset_name + '_' + experiment_name + '.pt'
+        torch.save(params,model_fp)
+        tp('s','New best model for ' + experiment_name + ' on ' + dataset_name)
+        tp('s','Written to: '+model_fp)
+    return best
 
 if __name__ == "__main__":
     # parses command line arguments
     args = parse_command_line()
+
+    # select hardware to use
+    if args.cuda and torch.cuda.is_available():
+        args.device = torch.device('cuda')
+    else:
+        args.device = torch.device('cpu')
 
     if args.train:
         # sets up for training
@@ -84,19 +96,24 @@ if __name__ == "__main__":
         tr_eval,va_eval = validation_setup(args)
         # sets up for visualizing training/validation
         tr_viz,va_viz = valid_visualization_setup(tr_eval,va_eval)
+        # sets up for saving trained models
+        best_performance = 0.0
         # training and validation loop
         for epoch in xrange(args.num_epochs):
             # validate and display
             if epoch % args.valid_freq == 0:
                 tr_performance,tr_loss = tr_eval.evaluate(trainer.model)
                 va_performance,va_loss = va_eval.evaluate(trainer.model)
-                print tr_performance
                 tr_viz.update(tr_performance,tr_loss,epoch)
                 va_viz.update(va_performance,va_loss,epoch)
+                # saves trained model by validation performance
+                best_performance = save_model(args.ds_name,
+                                              args.exp_name,
+                                              trainer.model.state_dict(),
+                                              va_performance,
+                                              best_performance)
 
             # train
             total_loss = trainer.train_epoch()
             tp('d','Total training loss: ' + str(total_loss) + ' for epoch ' + str(epoch))
 
-        # save the trained model
-        save_model(args.ds_name,args.exp_name,trainer.model.state_dict())

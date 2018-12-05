@@ -138,6 +138,7 @@ class PredictDataset(TripleDataset):
         super(PredictDataset, self).__init__(dataset_name,
                                              experiment_name)
         experiment_name_list = split('_',experiment_name)
+        experiment_name_list[-2] = '0'
         experiment_name_list[-1] = 'gt'
         self.ground_truth = GT(dataset_name,'_'.join(experiment_name_list))
 
