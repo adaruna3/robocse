@@ -22,12 +22,15 @@ class Evaluator:
                  shuffle,
                  num_workers,
                  device,
+                 exclude_train,
                  batch_cutoff=None):
         """
         :param dataset_name:
         :param experiment_name:
         """
-        self.dataset = PredictDataset(dataset_name,experiment_name)
+        self.dataset = PredictDataset(dataset_name,
+                                      experiment_name,
+                                      exclude_train=exclude_train)
         self.dataset_loader = DataLoader(self.dataset,
                                          batch_size=batch_size,
                                          shuffle=shuffle,
@@ -145,20 +148,22 @@ def validation_setup(cmd_args):
                              cmd_args.shuffle,
                              cmd_args.num_workers,
                              cmd_args.device,
+                             cmd_args.exclude_train,
                              cmd_args.batch_cutoff)
     va_evaluator = Evaluator(cmd_args.ds_name,
                              cmd_args.exp_name+'_valid',
                              cmd_args.batch_size,
                              cmd_args.shuffle,
                              cmd_args.num_workers,
-                             cmd_args.device)
+                             cmd_args.device,
+                             cmd_args.exclude_train)
     return tr_evaluator,va_evaluator
 
 
 def training_setup(cmd_args):
     # sets up triples training dataset
     dataset = TrainDataset(cmd_args.ds_name,
-                           cmd_args.exp_name,
+                           cmd_args.exp_name+'_train',
                            cmd_args.neg_ratio,
                            cmd_args.neg_method)
     # sets up batch data loader

@@ -12,7 +12,8 @@ class TripleDataset(Dataset):
                  dataset_name,
                  experiment_name,
                  negative_sampling_ratio=0,
-                 neg_sampling_method=None):
+                 neg_sampling_method=None,
+                 exclude_tain=0):
         """
         :param csv_file: dataset filename
         :param root_dir: dataset filepath
@@ -32,9 +33,9 @@ class TripleDataset(Dataset):
         """
         try:
             labels = pd.read_csv(csv_file)
-        except ValueError as e:
+        except IOError as e:
             tp('f','Could not load ' + str(csv_file))
-            raise ValueError
+            raise IOError
 
         return ({labels.iloc[idx,0]:idx for idx in xrange(labels.size)},
                 {idx:labels.iloc[idx,0] for idx in xrange(labels.size)})
@@ -51,9 +52,9 @@ class TripleDataset(Dataset):
         csv_file = dataset_fp + '_' + experiment_name + '.csv'
         try:
             str_triples = pd.read_csv(csv_file)
-        except ValueError as e:
+        except IOError as e:
             tp('f','Could not load ' + str(csv_file))
-            raise ValueError
+            raise IOError
 
         num_rows = str_triples.shape[0]
         int_triples = [[self.e2i[str_triples.iloc[idx,0]],
@@ -75,13 +76,14 @@ class TrainDataset(TripleDataset):
                  dataset_name,
                  experiment_name,
                  negative_sampling_ratio=0,
-                 neg_sampling_method=None):
+                 neg_sampling_method=None,
+                 exclude_tain=0):
         """
         :param csv_file: dataset filename
         :param root_dir: dataset filepath
         """
         super(TrainDataset, self).__init__(dataset_name,
-                                           experiment_name+'_train')
+                                           experiment_name)
         self.neg_ratio = negative_sampling_ratio
         self.neg_method = neg_sampling_method
 
@@ -130,17 +132,15 @@ class PredictDataset(TripleDataset):
                  dataset_name,
                  experiment_name,
                  negative_sampling_ratio=0,
-                 neg_sampling_method=None):
+                 neg_sampling_method=None,
+                 exclude_train=0):
         """
         :param dataset_name:
         :param experiment_name:
         """
         super(PredictDataset, self).__init__(dataset_name,
                                              experiment_name)
-        experiment_name_list = split('_',experiment_name)
-        experiment_name_list[-2] = '0'
-        experiment_name_list[-1] = 'gt'
-        self.ground_truth = GT(dataset_name,'_'.join(experiment_name_list))
+        self.ground_truth = GT(dataset_name,experiment_name,exclude_train)
 
     def __getitem__(self,idx):
         """
@@ -156,9 +156,7 @@ class PredictDataset(TripleDataset):
 
 
 class GT:
-    def __init__(self,
-                 dataset_name,
-                 experiment_name):
+    def __init__(self,dataset_name,experiment_name,exclude_train):
         """
         :param csv_file: dataset filename
         :param root_dir: dataset filepath
@@ -167,13 +165,13 @@ class GT:
         dataset_fp = datasets_fp + dataset_name
         ent_csv = dataset_fp + '_entities.csv'
         rel_csv = dataset_fp + '_relations.csv'
-        triples_csv = dataset_fp + '_' + experiment_name + '.csv'
         self.e2i, self.i2e = self.load_id_map(ent_csv)
         self.r2i, self.i2r = self.load_id_map(rel_csv)
         # loads the ground truth data
         memory_shape = (len(self.r2i),len(self.e2i),len(self.e2i))
         self.memory = np.zeros(shape=memory_shape,dtype=np.int64)
-        self.load_memory(triples_csv)
+        self.exclude = exclude_train  # when set, excludes train triples in rank
+        self.load_memory(dataset_name,experiment_name)
 
     def load_id_map(self,csv_file):
         """
@@ -182,29 +180,50 @@ class GT:
         """
         try:
             labels = pd.read_csv(csv_file)
-        except ValueError as e:
+        except IOError as e:
             tp('f','Could not load ' + str(csv_file))
-            raise ValueError
+            raise IOError
 
         return ({labels.iloc[idx,0]:idx for idx in xrange(labels.size)},
                 {idx:labels.iloc[idx,0] for idx in xrange(labels.size)})
 
-    def load_memory(self,csv_file):
+    def load_memory(self,dataset_name,experiment_name):
         """
         :param csv_file: filename of triples
         :return: loads a set of triples in a file
         """
+        datasets_fp = abspath(dirname(datasets.__file__)) + '/'
+        dataset_fp = datasets_fp + dataset_name
+        experiment_name_list = split('_',experiment_name)
+        if self.exclude:
+            experiment_name_list[-1] = 'train.csv'
+            train_csv_fp = dataset_fp+'_'+'_'.join(experiment_name_list)
+        experiment_name_list[-2] = '0'
+        experiment_name_list[-1] = 'gt.csv'
+        gt_csv_fp = dataset_fp+'_'+'_'.join(experiment_name_list)
         try:  # reads CSV
-            str_triples = pd.read_csv(csv_file)
-        except ValueError as e:
-            tp('f','Could not load ' + str(csv_file))
-            raise ValueError
+            str_triples = pd.read_csv(gt_csv_fp)
+        except IOError as e:
+            tp('f','Could not load ' + str(gt_csv_fp))
+            raise IOError
         # loads into memory datastructure
         num_rows = str_triples.shape[0]
         for idx in xrange(num_rows):
             self.memory[self.r2i[str_triples.iloc[idx,1]],
                         self.e2i[str_triples.iloc[idx,0]],
                         self.e2i[str_triples.iloc[idx,2]]] += 1
+        if self.exclude:
+            try:  # reads exclude CSV
+                str_triples = pd.read_csv(train_csv_fp)
+            except IOError as e:
+                tp('f','Could not load ' + str(train_csv_fp))
+                raise IOError
+            # excludes triples from ground truth rankings
+            num_rows = str_triples.shape[0]
+            for idx in xrange(num_rows):
+                self.memory[self.r2i[str_triples.iloc[idx,1]],
+                            self.e2i[str_triples.iloc[idx,0]],
+                            self.e2i[str_triples.iloc[idx,2]]] = 0
 
     def clear_model(self):
         self.memory = np.zeros(shape=self.memory.shape,dtype=np.int64)
@@ -250,8 +269,8 @@ class GT:
 if __name__ == "__main__":
     # creates train triples dataset
     dataset_name = 'demo'
-    experiment_name = 'ex'
-    dataset = TrainDataset(dataset_name,experiment_name,1,'random')
+    experiment_name = 'ex_0'
+    dataset = TrainDataset(dataset_name,experiment_name+'_train',1,'random')
     # loads triples for training
     batch_size = 2
     num_threads = 1

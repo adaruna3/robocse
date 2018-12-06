@@ -47,6 +47,8 @@ def parse_command_line():
                         nargs='?', help='Negative sampling Method')
     parser.add_argument('-c', dest='cuda', type=int, default=1,
                         nargs='?', help='Run on GPU?')
+    parser.add_argument('-et', dest='exclude_train', type=int, default=1,
+                        nargs='?', help='Exclude train triples from ranks?')
 
     parsed_args = parser.parse_args()
     tp('i','The current training parameters are: \n'+str(parsed_args))
