@@ -3,13 +3,16 @@ from argparse import ArgumentError
 
 from torch.utils.data import DataLoader
 import torch.optim as optim
+import torch
 
 from robocse_logging.viz_utils import tp
 from data_utils import PredictDataset
-from models import Analogy
+from models import Analogy,AnalogyReduced
 from data_utils import TrainDataset
+import trained_models
 
 from copy import copy
+from os.path import abspath,dirname
 
 import pdb
 
@@ -19,7 +22,6 @@ class Evaluator:
                  dataset_name,
                  experiment_name,
                  batch_size,
-                 shuffle,
                  num_workers,
                  device,
                  exclude_train,
@@ -33,7 +35,7 @@ class Evaluator:
                                       exclude_train=exclude_train)
         self.dataset_loader = DataLoader(self.dataset,
                                          batch_size=batch_size,
-                                         shuffle=shuffle,
+                                         shuffle=False,
                                          num_workers=num_workers)
         self.cutoff = batch_cutoff
         self.device = device
@@ -142,22 +144,21 @@ class Trainer:
 
 def validation_setup(cmd_args):
     # sets up for validation
-    tr_evaluator = Evaluator(cmd_args.ds_name,
-                             cmd_args.exp_name+'_train',
-                             cmd_args.batch_size,
-                             cmd_args.shuffle,
-                             cmd_args.num_workers,
-                             cmd_args.device,
-                             cmd_args.exclude_train,
-                             cmd_args.batch_cutoff)
+    #tr_evaluator = Evaluator(cmd_args.ds_name,
+    #                         cmd_args.exp_name+'_train',
+    #                         cmd_args.batch_size,
+    #                         cmd_args.num_workers,
+    #                         cmd_args.device,
+    #                         cmd_args.exclude_train,
+    #                         cmd_args.batch_cutoff)
     va_evaluator = Evaluator(cmd_args.ds_name,
                              cmd_args.exp_name+'_valid',
                              cmd_args.batch_size,
-                             cmd_args.shuffle,
                              cmd_args.num_workers,
                              cmd_args.device,
                              cmd_args.exclude_train)
-    return tr_evaluator,va_evaluator
+    #return tr_evaluator,va_evaluator
+    return va_evaluator
 
 
 def training_setup(cmd_args):
@@ -172,10 +173,18 @@ def training_setup(cmd_args):
                                 shuffle=cmd_args.shuffle,
                                 num_workers=cmd_args.num_workers)
     # sets up model
-    model = Analogy(len(dataset.e2i),
-                    len(dataset.r2i),
-                    cmd_args.d_size,
-                    cmd_args.device)
+    if cmd_args.exclude_train:
+        model = AnalogyReduced(len(dataset.e2i),
+                               len(dataset.r2i),
+                               cmd_args.d_size,
+                               cmd_args.device,
+                               cmd_args.ds_name,
+                               cmd_args.exp_name+'_train')
+    else:
+        model = Analogy(len(dataset.e2i),
+                        len(dataset.r2i),
+                        cmd_args.d_size,
+                        cmd_args.device)
     # sets up optimization method
     tr_optimizer = initialize_optimizer(cmd_args.opt_method,
                                         cmd_args.opt_params,model)
@@ -183,6 +192,39 @@ def training_setup(cmd_args):
     tr_trainer = Trainer(dataset_loader,tr_optimizer,model,cmd_args.device)
 
     return tr_trainer
+
+
+def testing_setup(cmd_args,fold):
+    te_tester = Evaluator(cmd_args.ds_name,
+                          cmd_args.exp_name+'_'+str(fold)+'_test',
+                          cmd_args.batch_size,
+                          cmd_args.num_workers,
+                          cmd_args.device,
+                          cmd_args.exclude_train)
+    # sets up model
+    if cmd_args.exclude_train:
+        te_model = AnalogyReduced(len(te_tester.dataset.e2i),
+                                  len(te_tester.dataset.r2i),
+                                  cmd_args.d_size,
+                                  cmd_args.device,
+                                  cmd_args.ds_name,
+                                  cmd_args.exp_name+'_'+str(fold)+'_train')
+        models_fp = abspath(dirname(trained_models.__file__)) + '/'
+        model_fp = models_fp + cmd_args.ds_name + '_' + \
+                   cmd_args.exp_name+'_'+str(fold) + '.pt'
+        te_model.load_state_dict(torch.load(model_fp))
+        te_model.eval()
+    else:
+        te_model = Analogy(len(te_tester.dataset.e2i),
+                           len(te_tester.dataset.r2i),
+                           cmd_args.d_size,
+                           cmd_args.device)
+        models_fp = abspath(dirname(trained_models.__file__)) + '/'
+        model_fp = models_fp + cmd_args.ds_name + '_' + \
+                   cmd_args.exp_name+'_'+str(fold) + '.pt'
+        te_model.load_state_dict(torch.load(model_fp))
+        te_model.eval()
+    return te_tester, te_model
 
 
 def initialize_optimizer(method,params,model):

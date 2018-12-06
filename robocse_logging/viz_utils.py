@@ -110,16 +110,17 @@ class RoboCSETrainViz():
                                   opts=opts)
 
 
-def valid_visualization_setup(train_evaluator,valid_evaluator):
+def valid_visualization_setup(valid_evaluator):
     viz_server = Visdom()
     assert viz_server.check_connection(),'Start Visdom!'
     viz_server.close()
-    train_viz = RoboCSETrainViz('Train',
-                                train_evaluator.dataset.i2r.values())
+    #train_viz = RoboCSETrainViz('Train',
+    #                            train_evaluator.dataset.i2r.values())
     valid_viz = RoboCSETrainViz('Valid',
                                 valid_evaluator.dataset.i2r.values())
     # clears main environment
-    return train_viz,valid_viz
+    #return train_viz,valid_viz
+    return valid_viz
 
 
 if __name__ == "__main__":

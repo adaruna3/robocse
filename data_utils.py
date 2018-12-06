@@ -6,6 +6,8 @@ from robocse_logging.viz_utils import tp
 import datasets
 from re import split
 
+import pdb
+
 
 class TripleDataset(Dataset):
     def __init__(self,
@@ -155,12 +157,13 @@ class PredictDataset(TripleDataset):
         return samples
 
 
-class GT:
-    def __init__(self,dataset_name,experiment_name,exclude_train):
+class TriplesCounter(object):
+    def __init__(self,dataset_name,experiment_name):
         """
         :param csv_file: dataset filename
         :param root_dir: dataset filepath
         """
+        super(TriplesCounter, self).__init__()
         datasets_fp = abspath(dirname(datasets.__file__)) + '/'
         dataset_fp = datasets_fp + dataset_name
         ent_csv = dataset_fp + '_entities.csv'
@@ -168,10 +171,9 @@ class GT:
         self.e2i, self.i2e = self.load_id_map(ent_csv)
         self.r2i, self.i2r = self.load_id_map(rel_csv)
         # loads the ground truth data
-        memory_shape = (len(self.r2i),len(self.e2i),len(self.e2i))
-        self.memory = np.zeros(shape=memory_shape,dtype=np.int64)
-        self.exclude = exclude_train  # when set, excludes train triples in rank
-        self.load_memory(dataset_name,experiment_name)
+        counts_shape = (len(self.r2i),len(self.e2i),len(self.e2i))
+        self.counts = np.zeros(shape=counts_shape,dtype=np.int64)
+        self.load_counts(dataset_name,experiment_name)
 
     def load_id_map(self,csv_file):
         """
@@ -187,20 +189,14 @@ class GT:
         return ({labels.iloc[idx,0]:idx for idx in xrange(labels.size)},
                 {idx:labels.iloc[idx,0] for idx in xrange(labels.size)})
 
-    def load_memory(self,dataset_name,experiment_name):
+    def load_counts(self,dataset_name,experiment_name):
         """
         :param csv_file: filename of triples
         :return: loads a set of triples in a file
         """
         datasets_fp = abspath(dirname(datasets.__file__)) + '/'
         dataset_fp = datasets_fp + dataset_name
-        experiment_name_list = split('_',experiment_name)
-        if self.exclude:
-            experiment_name_list[-1] = 'train.csv'
-            train_csv_fp = dataset_fp+'_'+'_'.join(experiment_name_list)
-        experiment_name_list[-2] = '0'
-        experiment_name_list[-1] = 'gt.csv'
-        gt_csv_fp = dataset_fp+'_'+'_'.join(experiment_name_list)
+        gt_csv_fp = dataset_fp+'_'+experiment_name+'.csv'
         try:  # reads CSV
             str_triples = pd.read_csv(gt_csv_fp)
         except IOError as e:
@@ -209,7 +205,43 @@ class GT:
         # loads into memory datastructure
         num_rows = str_triples.shape[0]
         for idx in xrange(num_rows):
-            self.memory[self.r2i[str_triples.iloc[idx,1]],
+            self.counts[self.r2i[str_triples.iloc[idx,1]],
+                        self.e2i[str_triples.iloc[idx,0]],
+                        self.e2i[str_triples.iloc[idx,2]]] += 1
+
+    def clear_model(self):
+        self.counts = np.zeros(shape=self.counts.shape,dtype=np.int64)
+
+
+class GT(TriplesCounter):
+    def __init__(self,dataset_name,experiment_name,exclude_train):
+        self.exclude = exclude_train
+        super(GT, self).__init__(dataset_name,experiment_name)
+        self.clear_model()
+        self.load_counts(dataset_name,experiment_name)
+
+    def load_counts(self,dataset_name,experiment_name):
+        """
+        :param csv_file: filename of triples
+        :return: loads a set of triples in a file
+        """
+        datasets_fp = abspath(dirname(datasets.__file__)) + '/'
+        dataset_fp = datasets_fp + dataset_name
+        experiment_name_list = split('_',experiment_name)
+        experiment_name_list[-1] = 'train.csv'
+        train_csv_fp = dataset_fp+'_'+'_'.join(experiment_name_list)
+        experiment_name_list[-2] = '0'
+        experiment_name_list[-1] = 'gt.csv'
+        gt_csv_fp = dataset_fp+'_'+'_'.join(experiment_name_list)
+        try:  # reads CSV
+            str_triples = pd.read_csv(gt_csv_fp)
+        except IOError as e:
+            tp('f','Could not load ' + str(gt_csv_fp))
+            raise IOError
+        # loads into counts datastructure
+        num_rows = str_triples.shape[0]
+        for idx in xrange(num_rows):
+            self.counts[self.r2i[str_triples.iloc[idx,1]],
                         self.e2i[str_triples.iloc[idx,0]],
                         self.e2i[str_triples.iloc[idx,2]]] += 1
         if self.exclude:
@@ -221,25 +253,22 @@ class GT:
             # excludes triples from ground truth rankings
             num_rows = str_triples.shape[0]
             for idx in xrange(num_rows):
-                self.memory[self.r2i[str_triples.iloc[idx,1]],
+                self.counts[self.r2i[str_triples.iloc[idx,1]],
                             self.e2i[str_triples.iloc[idx,0]],
                             self.e2i[str_triples.iloc[idx,2]]] = 0
 
-    def clear_model(self):
-        self.memory = np.zeros(shape=self.memory.shape,dtype=np.int64)
-
     def score(self, s, r, o):
         if s is None:
-            outputs = np.transpose([self.memory[r,:,o]])
-            ids = np.transpose([range(self.memory.shape[1])])
+            outputs = np.transpose([self.counts[r,:,o]])
+            ids = np.transpose([range(self.counts.shape[1])])
             outputs = np.append(ids,outputs,1)
         elif o is None:
-            outputs = np.transpose([self.memory[r,s,:]])
-            ids = np.transpose([range(self.memory.shape[1])])
+            outputs = np.transpose([self.counts[r,s,:]])
+            ids = np.transpose([range(self.counts.shape[1])])
             outputs = np.append(ids,outputs,1)
         elif r is None:
-            outputs = np.transpose([self.memory[:,s,o]])
-            ids = np.transpose([range(self.memory.shape[0])])
+            outputs = np.transpose([self.counts[:,s,o]])
+            ids = np.transpose([range(self.counts.shape[0])])
             outputs = np.append(ids,outputs,1)
         return outputs
 

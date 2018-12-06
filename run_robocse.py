@@ -2,7 +2,7 @@
 import torch
 
 # RoboCSE imports
-from trvate_utils import training_setup,validation_setup
+from trvate_utils import training_setup,validation_setup,testing_setup
 from robocse_logging.viz_utils import tp,valid_visualization_setup
 import trained_models
 
@@ -12,7 +12,7 @@ from os.path import abspath,dirname
 import argparse
 from sys import stdin
 from select import select
-from numpy import mean
+import numpy as np
 
 
 def parse_command_line():
@@ -49,6 +49,8 @@ def parse_command_line():
                         nargs='?', help='Run on GPU?')
     parser.add_argument('-et', dest='exclude_train', type=int, default=1,
                         nargs='?', help='Exclude train triples from ranks?')
+    parser.add_argument('-k', dest='num_folds', type=int, default=5,
+                        nargs='?', help='Testing number of folds')
 
     parsed_args = parser.parse_args()
     tp('i','The current training parameters are: \n'+str(parsed_args))
@@ -71,7 +73,7 @@ def confirm_params():
 
 
 def save_model(dataset_name,experiment_name,params,current,best):
-    mrr = mean(current[0,:,1]+current[2,:,1])
+    mrr = np.mean(current[0,:,1]+current[2,:,1])
     if mrr > best:
         best = mrr
         models_fp = abspath(dirname(trained_models.__file__)) + '/'
@@ -95,18 +97,20 @@ if __name__ == "__main__":
         # sets up for training
         trainer = training_setup(args)
         # sets up for validation
-        tr_eval,va_eval = validation_setup(args)
+        #tr_eval,va_eval = validation_setup(args)
+        va_eval = validation_setup(args)
         # sets up for visualizing training/validation
-        tr_viz,va_viz = valid_visualization_setup(tr_eval,va_eval)
+        #tr_viz,va_viz = valid_visualization_setup(tr_eval,va_eval)
+        va_viz = valid_visualization_setup(va_eval)
         # sets up for saving trained models
         best_performance = 0.0
         # training and validation loop
         for epoch in xrange(args.num_epochs):
             # validate and display
             if epoch % args.valid_freq == 0:
-                tr_performance,tr_loss = tr_eval.evaluate(trainer.model)
+                #tr_performance,tr_loss = tr_eval.evaluate(trainer.model)
                 va_performance,va_loss = va_eval.evaluate(trainer.model)
-                tr_viz.update(tr_performance,tr_loss,epoch)
+                #tr_viz.update(tr_performance,tr_loss,epoch)
                 va_viz.update(va_performance,va_loss,epoch)
                 # saves trained model by validation performance
                 best_performance = save_model(args.ds_name,
@@ -118,4 +122,13 @@ if __name__ == "__main__":
             # train
             total_loss = trainer.train_epoch()
             tp('d','Total training loss: ' + str(total_loss) + ' for epoch ' + str(epoch))
+    else:
+        # sets up for testing
+        all_performance = []
+        for fold in xrange(args.num_folds):
+            tester,test_model = testing_setup(args,fold)
+            te_performance,te_loss = tester.evaluate(test_model)
+            all_performance.append(te_performance)
+        print np.mean(np.asarray(all_performance),axis=0)
+
 

@@ -3,6 +3,8 @@ import torch
 from torch.autograd import Variable
 import numpy as np
 
+from data_utils import TriplesCounter
+
 import pdb
 
 
@@ -173,17 +175,92 @@ class Analogy(nn.Module):
         return np.asarray(batch_y)
 
 
+class AnalogyReduced(Analogy):
+    """
+    Reduced domain Analogy model
+    """
+    def __init__(self,
+                 num_ents,
+                 num_rels,
+                 hidden_size,
+                 device,
+                 dataset_name,
+                 experiment_name,
+                 lmbda=0.0):
+        super(AnalogyReduced, self).__init__(num_ents,
+                                              num_rels,
+                                              hidden_size,
+                                              device,
+                                              lmbda)
+        self.tr_triples = TriplesCounter(dataset_name,experiment_name)
+
+    def get_ranks(self,batch):
+        batch_s = batch[:,:,0].reshape(batch.shape[0]*batch.shape[1])
+        batch_r = batch[:,:,1].reshape(batch.shape[0]*batch.shape[1])
+        batch_o = batch[:,:,2].reshape(batch.shape[0]*batch.shape[1])
+        batch_q = batch[:,:,4].reshape(batch.shape[0]*batch.shape[1])
+        batch_y = []
+        for q_idx in xrange(len(batch_q)):
+            # sets up the query
+            if batch_q[q_idx] == 0:
+                rel = batch_r[q_idx]
+                obj = batch_o[q_idx]
+                non_train = np.where(self.tr_triples.counts[rel,:,obj]==0)[0]
+                subj = Variable(torch.from_numpy(non_train)).to(self.device)
+            elif batch_q[q_idx] == 1:
+                subj = batch_s[q_idx]
+                obj = batch_o[q_idx]
+                non_train = np.where(self.tr_triples.counts[:,subj,obj]==0)[0]
+                rel = Variable(torch.from_numpy(non_train)).to(self.device)
+            elif batch_q[q_idx] == 2:
+                subj = batch_s[q_idx]
+                rel = batch_r[q_idx]
+                non_train = np.where(self.tr_triples.counts[rel,subj,:]==0)[0]
+                obj = Variable(torch.from_numpy(non_train)).to(self.device)
+            # gets embeddings
+            p_re_s = self.ent_re_embeddings(subj)
+            p_im_s = self.ent_im_embeddings(subj)
+            p_s = self.ent_im_embeddings(subj)
+            p_re_o = self.ent_re_embeddings(obj)
+            p_im_o = self.ent_im_embeddings(obj)
+            p_o = self.ent_im_embeddings(obj)
+            p_re_r = self.rel_re_embeddings(rel)
+            p_im_r = self.rel_im_embeddings(rel)
+            p_r = self.rel_im_embeddings(rel)
+            # calculates the rank
+            scores = -self._calc(p_re_s, p_im_s, p_s,
+                                 p_re_o, p_im_o, p_o,
+                                 p_re_r, p_im_r, p_r)
+            ranks = np.argsort(scores.cpu().detach().numpy(),axis=0)
+            # stores the rank
+            if batch_q[q_idx] == 0:
+                batch_y.append(ranks[np.where(non_train==batch_s[q_idx])[0]][0])
+            elif batch_q[q_idx] == 1:
+                batch_y.append(ranks[np.where(non_train==batch_r[q_idx])[0]][0])
+            elif batch_q[q_idx] == 2:
+                batch_y.append(ranks[np.where(non_train==batch_o[q_idx])[0]][0])
+        return np.asarray(batch_y)
+
+
+
 if __name__ == "__main__":
     from data_utils import TrainDataset,PredictDataset
     from torch.utils.data import DataLoader
 
     # creates triples train dataset
     dataset_name = 'demo'
-    experiment_name = 'ex'
-    dataset = TrainDataset(dataset_name,experiment_name,1,'random')
+    experiment_name = 'ex_0'
+    dataset = TrainDataset(dataset_name,experiment_name+'_train',1,'random')
 
     # creates analogy model
-    model = Analogy(len(dataset.e2i),len(dataset.r2i),100)
+    model = AnalogyReduced(len(dataset.e2i),
+                           len(dataset.r2i),
+                           100,
+                           torch.device('cpu'),
+                           dataset_name,
+                           experiment_name+'_train')
+    # creates reduced analogy model
+    # model = Analogy(len(dataset.e2i),len(dataset.r2i),100,torch.device('cpu'))
 
     # batch loads triples for training
     batch_size = 2
