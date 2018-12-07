@@ -67,8 +67,10 @@ class Evaluator:
             # gets AMMR and Hits@X* metrics
             m1_o = batch[:,:,5].flatten()
             m2_o = model.get_ranks(batch.to(self.device))
-            amrr = self.get_amrr(m1_o.numpy(),m2_o)
-            hits = abs(m1_o.numpy()-m2_o)
+            #amrr = self.get_amrr(m1_o.numpy(),m2_o)
+            amrr = 1.0/(m2_o+1.0)
+            #hits = abs(m1_o.numpy()-m2_o)
+            hits = m2_o+1.0
             # store results
             for idx_q in xrange(3):
                 if idx_q == 1:  # handles sRo queries

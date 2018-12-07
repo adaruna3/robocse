@@ -24,17 +24,17 @@ class Analogy(nn.Module):
         self.lmbda = lmbda
         self.device = device
         self.ent_im_embeddings = \
-            nn.Embedding(num_ents,hidden_size/2).to(self.device)
+            nn.Embedding(num_ents,hidden_size/4).to(self.device)
         self.ent_re_embeddings = \
-            nn.Embedding(num_ents,hidden_size/2).to(self.device)
+            nn.Embedding(num_ents,hidden_size/4).to(self.device)
         self.rel_re_embeddings = \
-            nn.Embedding(num_rels,hidden_size/2).to(self.device)
+            nn.Embedding(num_rels,hidden_size/4).to(self.device)
         self.rel_im_embeddings = \
-            nn.Embedding(num_rels,hidden_size/2).to(self.device)
+            nn.Embedding(num_rels,hidden_size/4).to(self.device)
         self.ent_embeddings = \
-            nn.Embedding(num_ents, hidden_size).to(self.device)
+            nn.Embedding(num_ents,hidden_size/2).to(self.device)
         self.rel_embeddings = \
-            nn.Embedding(num_rels, hidden_size).to(self.device)
+            nn.Embedding(num_rels,hidden_size/2).to(self.device)
         self.softplus = nn.Softplus().to(self.device)
         self.init_embeddings()
 
@@ -164,14 +164,15 @@ class Analogy(nn.Module):
             scores = -self._calc(p_re_s, p_im_s, p_s,
                                  p_re_o, p_im_o, p_o,
                                  p_re_r, p_im_r, p_r)
-            ranks = np.argsort(scores.cpu().detach().numpy(),axis=0)
+            ranks = np.flip(np.argsort(scores.cpu().detach().numpy(),0),0)
             # stores the rank
+            pdb.set_trace()
             if batch_q[q_idx] == 0:
-                batch_y.append(ranks[batch_s[q_idx]])
+                batch_y.append(np.where(ranks==batch_s[q_idx])[0][0])
             elif batch_q[q_idx] == 1:
-                batch_y.append(ranks[batch_r[q_idx]])
+                batch_y.append(np.where(ranks==batch_r[q_idx])[0][0])
             elif batch_q[q_idx] == 2:
-                batch_y.append(ranks[batch_o[q_idx]])
+                batch_y.append(np.where(ranks==batch_o[q_idx])[0][0])
         return np.asarray(batch_y)
 
 
@@ -228,17 +229,20 @@ class AnalogyReduced(Analogy):
             p_im_r = self.rel_im_embeddings(rel)
             p_r = self.rel_im_embeddings(rel)
             # calculates the rank
-            scores = -self._calc(p_re_s, p_im_s, p_s,
+            scores = self._calc(p_re_s, p_im_s, p_s,
                                  p_re_o, p_im_o, p_o,
                                  p_re_r, p_im_r, p_r)
-            ranks = np.argsort(scores.cpu().detach().numpy(),axis=0)
+            ranks = np.flip(np.argsort(scores.cpu().detach().numpy(),0),0)
             # stores the rank
             if batch_q[q_idx] == 0:
-                batch_y.append(ranks[np.where(non_train==batch_s[q_idx])[0]][0])
+                non_train_idx = np.where(non_train==batch_s[q_idx])[0][0]
+                batch_y.append(np.where(ranks==non_train_idx)[0][0])
             elif batch_q[q_idx] == 1:
-                batch_y.append(ranks[np.where(non_train==batch_r[q_idx])[0]][0])
+                non_train_idx = np.where(non_train==batch_r[q_idx])[0][0]
+                batch_y.append(np.where(ranks==non_train_idx)[0][0])
             elif batch_q[q_idx] == 2:
-                batch_y.append(ranks[np.where(non_train==batch_o[q_idx])[0]][0])
+                non_train_idx = np.where(non_train==batch_o[q_idx])[0][0]
+                batch_y.append(np.where(ranks==non_train_idx)[0][0])
         return np.asarray(batch_y)
 
 
