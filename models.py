@@ -118,9 +118,9 @@ class Analogy(nn.Module):
         p_im_s = self.ent_im_embeddings(Variable(torch.from_numpy(batch_s)))
         p_im_o = self.ent_im_embeddings(Variable(torch.from_numpy(batch_o)))
         p_im_r = self.rel_im_embeddings(Variable(torch.from_numpy(batch_r)))
-        p_s = self.ent_im_embeddings(Variable(torch.from_numpy(batch_s)))
-        p_o = self.ent_im_embeddings(Variable(torch.from_numpy(batch_o)))
-        p_r = self.rel_im_embeddings(Variable(torch.from_numpy(batch_r)))
+        p_s = self.ent_embeddings(Variable(torch.from_numpy(batch_s)))
+        p_o = self.ent_embeddings(Variable(torch.from_numpy(batch_o)))
+        p_r = self.rel_embeddings(Variable(torch.from_numpy(batch_r)))
         # calculates the score
         score = -self._calc(p_re_s, p_im_s, p_s,
                             p_re_o, p_im_o, p_o,
@@ -151,19 +151,17 @@ class Analogy(nn.Module):
                 obj = Variable(torch.from_numpy(
                     np.arange(self.num_ents))).to(self.device)
             # gets embeddings
-            p_re_s = self.ent_re_embeddings(subj)
-            p_im_s = self.ent_im_embeddings(subj)
-            p_s = self.ent_im_embeddings(subj)
-            p_re_o = self.ent_re_embeddings(obj)
-            p_im_o = self.ent_im_embeddings(obj)
-            p_o = self.ent_im_embeddings(obj)
-            p_re_r = self.rel_re_embeddings(rel)
-            p_im_r = self.rel_im_embeddings(rel)
-            p_r = self.rel_im_embeddings(rel)
+            e_re_s = self.ent_re_embeddings(subj)
+            e_im_s = self.ent_im_embeddings(subj)
+            e_s = self.ent_embeddings(subj)
+            r_re = self.rel_re_embeddings(rel)
+            r_im = self.rel_im_embeddings(rel)
+            r = self.rel_embeddings(rel)
+            e_re_o = self.ent_re_embeddings(obj)
+            e_im_o = self.ent_im_embeddings(obj)
+            e_o = self.ent_embeddings(obj)
             # calculates the rank
-            scores = -self._calc(p_re_s, p_im_s, p_s,
-                                 p_re_o, p_im_o, p_o,
-                                 p_re_r, p_im_r, p_r)
+            scores = self._calc(e_re_s,e_im_s,e_s,e_re_o,e_im_o,e_o,r_re,r_im,r)
             ranks = np.flip(np.argsort(scores.cpu().detach().numpy(),0),0)
             # stores the rank
             pdb.set_trace()
@@ -219,19 +217,17 @@ class AnalogyReduced(Analogy):
                 non_train = np.where(self.tr_triples.counts[rel,subj,:]==0)[0]
                 obj = Variable(torch.from_numpy(non_train)).to(self.device)
             # gets embeddings
-            p_re_s = self.ent_re_embeddings(subj)
-            p_im_s = self.ent_im_embeddings(subj)
-            p_s = self.ent_im_embeddings(subj)
-            p_re_o = self.ent_re_embeddings(obj)
-            p_im_o = self.ent_im_embeddings(obj)
-            p_o = self.ent_im_embeddings(obj)
-            p_re_r = self.rel_re_embeddings(rel)
-            p_im_r = self.rel_im_embeddings(rel)
-            p_r = self.rel_im_embeddings(rel)
+            e_re_s = self.ent_re_embeddings(subj)
+            e_im_s = self.ent_im_embeddings(subj)
+            e_s = self.ent_embeddings(subj)
+            r_re = self.rel_re_embeddings(rel)
+            r_im = self.rel_im_embeddings(rel)
+            r = self.rel_embeddings(rel)
+            e_re_o = self.ent_re_embeddings(obj)
+            e_im_o = self.ent_im_embeddings(obj)
+            e_o = self.ent_embeddings(obj)
             # calculates the rank
-            scores = self._calc(p_re_s, p_im_s, p_s,
-                                 p_re_o, p_im_o, p_o,
-                                 p_re_r, p_im_r, p_r)
+            scores = self._calc(e_re_s,e_im_s,e_s,e_re_o,e_im_o,e_o,r_re,r_im,r)
             ranks = np.flip(np.argsort(scores.cpu().detach().numpy(),0),0)
             # stores the rank
             if batch_q[q_idx] == 0:

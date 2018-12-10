@@ -47,9 +47,9 @@ class Evaluator:
         :return: metrics
         """
         # set model for evaluation
-        #model_was_training = model.training
-        #if model_was_training:
-        #    model.eval()
+        model_was_training = model.training
+        if model_was_training:
+            model.eval()
 
         # initialize return variables
         num_samples = np.zeros((3,len(self.dataset.r2i),1),np.float64)
@@ -100,9 +100,8 @@ class Evaluator:
                         num_samples[idx_q,idx_r,0] += len(idxs[0])
 
         # set model back to previous state
-        #if model_was_training:
-        #    model.train()
-
+        if model_was_training:
+            model.train()
         return metric/num_samples, total_loss
 
     def get_amrr(self,o1,o2):

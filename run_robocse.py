@@ -20,7 +20,7 @@ def parse_command_line():
     parser.add_argument('ds_name', type=str,
                         help='DataSet name')
     parser.add_argument('exp_name', type=str,
-                        help='EXPeriment name for train,valid, & test')
+                        help='EXPeriment NAME for train,valid, & test')
     parser.add_argument('-bs', dest='batch_size', type=int, default=50,
                         nargs='?', help='Batch size')
     parser.add_argument('-n', dest='num_workers', type=int, default=32,
@@ -53,7 +53,11 @@ def parse_command_line():
                         nargs='?', help='Testing number of folds')
 
     parsed_args = parser.parse_args()
-    tp('i','The current training parameters are: \n'+str(parsed_args))
+    if parsed_args.train:
+        tp('i','The current training parameters are: \n'+str(parsed_args))
+    else:
+        tp('i','The current testing parameters are: \n'+str(parsed_args))
+
     if not confirm_params():
         exit()
     return parsed_args
