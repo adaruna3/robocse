@@ -13,6 +13,7 @@ import argparse
 from sys import stdin
 from select import select
 import numpy as np
+from time import time
 
 
 def parse_command_line():
@@ -23,9 +24,9 @@ def parse_command_line():
                         help='EXPeriment NAME for train,valid, & test')
     parser.add_argument('-bs', dest='batch_size', type=int, default=50,
                         nargs='?', help='Batch size')
-    parser.add_argument('-n', dest='num_workers', type=int, default=32,
+    parser.add_argument('-n', dest='num_workers', type=int, default=16,
                         nargs='?', help='Number of training threads')
-    parser.add_argument('-s', dest='shuffle', type=int, default=0,
+    parser.add_argument('-s', dest='shuffle', type=int, default=1,
                         nargs='?', help='Shuffle bathces flag')
     parser.add_argument('-d', dest='d_size', type=int, default=100,
                         nargs='?', help='embedding Dimensionality')
@@ -51,6 +52,8 @@ def parse_command_line():
                         nargs='?', help='Exclude train triples from ranks?')
     parser.add_argument('-k', dest='num_folds', type=int, default=5,
                         nargs='?', help='Testing number of folds')
+    parser.add_argument('-en', dest='exp_num', type=int, default=0,
+                        nargs='?', help='Experiment number')
 
     parsed_args = parser.parse_args()
     if parsed_args.train:
@@ -65,7 +68,7 @@ def parse_command_line():
 
 def confirm_params():
     tp('d','Continue training? (Y/n) waiting 10s ...')
-    i, o, e = select( [stdin], [], [], 10 )
+    i, o, e = select( [stdin], [], [], 0.0 )
     if i:  # read input
         cont = stdin.readline().strip()
         if cont == 'Y' or cont == 'y':
@@ -76,14 +79,17 @@ def confirm_params():
         return True
 
 
-def save_model(dataset_name,experiment_name,params,current,best):
+def save_model(cmd_args,params,current,best):
+    ds_name = cmd_args.ds_name
+    exp_name = cmd_args.exp_name
+    exp_num = cmd_args.exp_num
     mrr = np.mean(current[0,:,1]+current[2,:,1])
     if mrr > best:
         best = mrr
         models_fp = abspath(dirname(trained_models.__file__)) + '/'
-        model_fp = models_fp + dataset_name + '_' + experiment_name + '.pt'
+        model_fp = models_fp+ds_name+'_'+exp_name+'_'+str(exp_num)+'.pt'
         torch.save(params,model_fp)
-        tp('s','New best model for ' + experiment_name + ' on ' + dataset_name)
+        tp('s','New best model for ' + exp_name + ' on ' + ds_name)
         tp('s','Written to: '+model_fp)
     return best
 
@@ -96,6 +102,8 @@ if __name__ == "__main__":
         args.device = torch.device('cuda')
     else:
         args.device = torch.device('cpu')
+
+    start = time()
 
     if args.train:
         # sets up for training
@@ -117,15 +125,15 @@ if __name__ == "__main__":
                 #tr_viz.update(tr_performance,tr_loss,epoch)
                 va_viz.update(va_performance,va_loss,epoch)
                 # saves trained model by validation performance
-                best_performance = save_model(args.ds_name,
-                                              args.exp_name,
+                best_performance = save_model(args,
                                               trainer.model.state_dict(),
                                               va_performance,
                                               best_performance)
 
             # train
-            total_loss = trainer.train_epoch()
-            tp('d','Total training loss: ' + str(total_loss) + ' for epoch ' + str(epoch))
+            trainer.train_epoch()
+            tp('d','Epoch: ' + str(epoch))
+            #tp('d','Total training loss: ' + str(total_loss) + ' for epoch ' + str(epoch))
     else:
         # sets up for testing
         all_performance = []
@@ -135,4 +143,5 @@ if __name__ == "__main__":
             all_performance.append(te_performance)
         print np.mean(np.asarray(all_performance),axis=0)
 
+    tp('d','Total time:' + str(time()-start))
 

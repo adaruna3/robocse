@@ -36,7 +36,8 @@ class Evaluator:
         self.dataset_loader = DataLoader(self.dataset,
                                          batch_size=batch_size,
                                          shuffle=False,
-                                         num_workers=num_workers)
+                                         num_workers=num_workers,
+                                         collate_fn=valid_collate)
         self.cutoff = batch_cutoff
         self.device = device
 
@@ -57,24 +58,25 @@ class Evaluator:
         total_loss = 0.0
 
         # evaluate the model over the triples set
-        for idx_b, batch in enumerate(self.dataset_loader):
+        for idx_b,batch in enumerate(self.dataset_loader):
+            bs,br,bo,by,bq,bk = batch
             if (self.cutoff is not None) and (idx_b > self.cutoff):
                 break  # break if not going through all batches
             # gets total loss
-            loss = copy(model.forward(batch.to(self.device)).cpu())
+            loss = copy(model.forward(bs.to(self.device),br.to(self.device),
+                                      bo.to(self.device),by.to(self.device)).cpu())
             total_loss += loss.detach().numpy()
 
             # gets AMMR and Hits@X* metrics
-            m1_o = batch[:,:,5].flatten()
-            m2_o = model.get_ranks(batch.to(self.device))
-            #amrr = self.get_amrr(m1_o.numpy(),m2_o)
-            amrr = 1.0/(m2_o+1.0)
-            #hits = abs(m1_o.numpy()-m2_o)
-            hits = m2_o+1.0
+            ranks1 = bk + 1.0
+            ranks2 = model.get_ranks(bs.to(self.device),br.to(self.device),
+                                     bo.to(self.device),bq.to(self.device))+1.0
+            hits = np.abs(ranks1.numpy()-ranks2)+1.0
+            amrr = 1.0/hits
             # store results
             for idx_q in xrange(3):
                 if idx_q == 1:  # handles sRo queries
-                    idxs = np.where(batch[:,:,4].flatten()==idx_q)
+                    idxs = np.where(bq==idx_q)
                     metric[idx_q,:,0] += \
                         np.sum(amrr[idxs[0]])  # AMRR
                     metric[idx_q,:,1] += \
@@ -86,8 +88,7 @@ class Evaluator:
                     num_samples[idx_q,:,0] += len(idxs[0])
                 else:
                     for idx_r in xrange(len(self.dataset.r2i)):
-                        idxs = np.logical_and((batch[:,:,1].flatten()==idx_r),
-                                              (batch[:,:,4].flatten()==idx_q))
+                        idxs = np.logical_and((br==idx_r),(bq==idx_q))
                         idxs = np.where(idxs)
                         metric[idx_q,idx_r,0] += \
                             np.sum(amrr[idxs[0]])  # AMRR
@@ -104,20 +105,6 @@ class Evaluator:
             model.train()
         return metric/num_samples, total_loss
 
-    def get_amrr(self,o1,o2):
-        # adjust o1
-        o1 = copy(o1)
-        idxs = np.where(o1<o2)
-        o1[idxs] -= 1
-        # adjust o1 again
-        idxs = np.where(o1>o2)
-        o1[idxs] += 1
-        # calculate mrr
-        result = abs(o2-o1)**-1.0
-        idxs = np.where(o1==o2)
-        result[idxs] = 1.0
-        return result
-
     def debug_output(self,batch,hits,metric,total):
         tp('d','Current batch is: \n' + str(batch))
         tp('d','Current relation total is: \n' + str(total))
@@ -133,14 +120,16 @@ class Trainer:
         self.device = device
 
     def train_epoch(self):
-        total_loss = 0.0
-        for idx_b, batch in enumerate(self.data_loader):
+        #total_loss = 0.0
+        for idx_b,batch in enumerate(self.data_loader):
+            bs,br,bo,by = batch
             self.optimizer.zero_grad()
-            loss = self.model.forward(batch.to(self.device))
-            total_loss += loss.cpu().detach().numpy()
+            loss = self.model.forward(bs.to(self.device),br.to(self.device),
+                                      bo.to(self.device),by.to(self.device))
+            #total_loss += loss.cpu().detach().numpy()
             loss.backward()
             self.optimizer.step()
-        return total_loss
+        #return total_loss
 
 
 def validation_setup(cmd_args):
@@ -172,7 +161,8 @@ def training_setup(cmd_args):
     dataset_loader = DataLoader(dataset,
                                 batch_size=cmd_args.batch_size,
                                 shuffle=cmd_args.shuffle,
-                                num_workers=cmd_args.num_workers)
+                                num_workers=cmd_args.num_workers,
+                                collate_fn=train_collate)
     # sets up model
     if cmd_args.exclude_train:
         model = AnalogyReduced(len(dataset.e2i),
@@ -186,6 +176,7 @@ def training_setup(cmd_args):
                         len(dataset.r2i),
                         cmd_args.d_size,
                         cmd_args.device)
+    model.to(cmd_args.device)
     # sets up optimization method
     tr_optimizer = initialize_optimizer(cmd_args.opt_method,
                                         cmd_args.opt_params,model)
@@ -193,6 +184,26 @@ def training_setup(cmd_args):
     tr_trainer = Trainer(dataset_loader,tr_optimizer,model,cmd_args.device)
 
     return tr_trainer
+
+
+def train_collate(batch):
+    batch = torch.tensor(batch)
+    batch_s = batch[:,:,0].flatten()
+    batch_r = batch[:,:,1].flatten()
+    batch_o = batch[:,:,2].flatten()
+    batch_y = batch[:,:,3].flatten()
+    return batch_s,batch_r,batch_o,batch_y
+
+
+def valid_collate(batch):
+    batch = torch.tensor(batch)
+    batch_s = batch[:,:,0].flatten()
+    batch_r = batch[:,:,1].flatten()
+    batch_o = batch[:,:,2].flatten()
+    batch_y = batch[:,:,3].flatten()
+    batch_q = batch[:,:,4].flatten()
+    batch_k = batch[:,:,5].flatten()
+    return batch_s,batch_r,batch_o,batch_y,batch_q,batch_k
 
 
 def testing_setup(cmd_args,fold):

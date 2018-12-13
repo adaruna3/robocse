@@ -42,12 +42,12 @@ class Analogy(nn.Module):
         """
         Initializes the embedding weights
         """
-        nn.init.xavier_uniform_(self.ent_re_embeddings.weight.data)
-        nn.init.xavier_uniform_(self.ent_im_embeddings.weight.data)
-        nn.init.xavier_uniform_(self.rel_re_embeddings.weight.data)
-        nn.init.xavier_uniform_(self.rel_im_embeddings.weight.data)
-        nn.init.xavier_uniform_(self.ent_embeddings.weight.data)
-        nn.init.xavier_uniform_(self.rel_embeddings.weight.data)
+        nn.init.uniform_(self.ent_re_embeddings.weight.data,-1e-2,1e-2)
+        nn.init.uniform_(self.ent_im_embeddings.weight.data,-1e-2,1e-2)
+        nn.init.uniform_(self.rel_re_embeddings.weight.data,-1e-2,1e-2)
+        nn.init.uniform_(self.rel_im_embeddings.weight.data,-1e-2,1e-2)
+        nn.init.uniform_(self.ent_embeddings.weight.data,-1e-2,1e-2)
+        nn.init.uniform_(self.rel_embeddings.weight.data,-1e-2,1e-2)
 
     def _calc(self,e_re_s,e_im_s,e_s,e_re_o,e_im_o,e_o,r_re,r_im,r):
         """
@@ -70,17 +70,13 @@ class Analogy(nn.Module):
                          1,False) + \
                torch.sum(e_s*e_o*r,1,False)
 
-    def forward(self,batch):
+    def forward(self,batch_s,batch_r,batch_o,batch_y):
         """
         Feeds a batch of triples forward through the analogy model for training
         :param batch: input batch of triples
         :param labels: labels for input batch
         :return: returns average loss over the batch
         """
-        batch_s = batch[:,:,0].reshape(batch.shape[0]*batch.shape[1])
-        batch_r = batch[:,:,1].reshape(batch.shape[0]*batch.shape[1])
-        batch_o = batch[:,:,2].reshape(batch.shape[0]*batch.shape[1])
-        batch_y = batch[:,:,3].reshape(batch.shape[0]*batch.shape[1])
         # get the corresponding embeddings for calculations
         e_re_s = self.ent_re_embeddings(batch_s)
         e_im_s = self.ent_im_embeddings(batch_s)
@@ -127,11 +123,7 @@ class Analogy(nn.Module):
                             p_re_r, p_im_r, p_r)
         return score.cpu()
 
-    def get_ranks(self,batch):
-        batch_s = batch[:,:,0].reshape(batch.shape[0]*batch.shape[1])
-        batch_r = batch[:,:,1].reshape(batch.shape[0]*batch.shape[1])
-        batch_o = batch[:,:,2].reshape(batch.shape[0]*batch.shape[1])
-        batch_q = batch[:,:,4].reshape(batch.shape[0]*batch.shape[1])
+    def get_ranks(self,batch_s,batch_r,batch_o,batch_q):
         batch_y = []
         for q_idx in xrange(len(batch_q)):
             # sets up the query
@@ -162,7 +154,7 @@ class Analogy(nn.Module):
             e_o = self.ent_embeddings(obj)
             # calculates the rank
             scores = self._calc(e_re_s,e_im_s,e_s,e_re_o,e_im_o,e_o,r_re,r_im,r)
-            ranks = np.flip(np.argsort(scores.cpu().detach().numpy(),0),0)
+            ranks = np.flip(np.argsort(scores.cpu().detach().numpy()-1e-32,0),0)
             # stores the rank
             pdb.set_trace()
             if batch_q[q_idx] == 0:
@@ -187,17 +179,13 @@ class AnalogyReduced(Analogy):
                  experiment_name,
                  lmbda=0.0):
         super(AnalogyReduced, self).__init__(num_ents,
-                                              num_rels,
-                                              hidden_size,
-                                              device,
-                                              lmbda)
+                                             num_rels,
+                                             hidden_size,
+                                             device,
+                                             lmbda)
         self.tr_triples = TriplesCounter(dataset_name,experiment_name)
 
-    def get_ranks(self,batch):
-        batch_s = batch[:,:,0].reshape(batch.shape[0]*batch.shape[1])
-        batch_r = batch[:,:,1].reshape(batch.shape[0]*batch.shape[1])
-        batch_o = batch[:,:,2].reshape(batch.shape[0]*batch.shape[1])
-        batch_q = batch[:,:,4].reshape(batch.shape[0]*batch.shape[1])
+    def get_ranks(self,batch_s,batch_r,batch_o,batch_q):
         batch_y = []
         for q_idx in xrange(len(batch_q)):
             # sets up the query
@@ -228,7 +216,7 @@ class AnalogyReduced(Analogy):
             e_o = self.ent_embeddings(obj)
             # calculates the rank
             scores = self._calc(e_re_s,e_im_s,e_s,e_re_o,e_im_o,e_o,r_re,r_im,r)
-            ranks = np.flip(np.argsort(scores.cpu().detach().numpy(),0),0)
+            ranks = np.flip(np.argsort(scores.cpu().detach().numpy()-1e-32,0),0)
             # stores the rank
             if batch_q[q_idx] == 0:
                 non_train_idx = np.where(non_train==batch_s[q_idx])[0][0]
@@ -240,7 +228,6 @@ class AnalogyReduced(Analogy):
                 non_train_idx = np.where(non_train==batch_o[q_idx])[0][0]
                 batch_y.append(np.where(ranks==non_train_idx)[0][0])
         return np.asarray(batch_y)
-
 
 
 if __name__ == "__main__":
