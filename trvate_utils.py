@@ -120,34 +120,26 @@ class Trainer:
         self.device = device
 
     def train_epoch(self):
-        #total_loss = 0.0
+        total_loss = 0.0
         for idx_b,batch in enumerate(self.data_loader):
             bs,br,bo,by = batch
             self.optimizer.zero_grad()
             loss = self.model.forward(bs.to(self.device),br.to(self.device),
                                       bo.to(self.device),by.to(self.device))
-            #total_loss += loss.cpu().detach().numpy()
+            total_loss += loss.cpu().detach().numpy()
             loss.backward()
             self.optimizer.step()
-        #return total_loss
+        return total_loss
 
 
 def validation_setup(cmd_args):
     # sets up for validation
-    #tr_evaluator = Evaluator(cmd_args.ds_name,
-    #                         cmd_args.exp_name+'_train',
-    #                         cmd_args.batch_size,
-    #                         cmd_args.num_workers,
-    #                         cmd_args.device,
-    #                         cmd_args.exclude_train,
-    #                         cmd_args.batch_cutoff)
     va_evaluator = Evaluator(cmd_args.ds_name,
                              cmd_args.exp_name+'_valid',
                              cmd_args.batch_size,
                              cmd_args.num_workers,
                              cmd_args.device,
                              cmd_args.exclude_train)
-    #return tr_evaluator,va_evaluator
     return va_evaluator
 
 

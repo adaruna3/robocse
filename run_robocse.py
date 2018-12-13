@@ -24,7 +24,7 @@ def parse_command_line():
                         help='EXPeriment NAME for train,valid, & test')
     parser.add_argument('-bs', dest='batch_size', type=int, default=50,
                         nargs='?', help='Batch size')
-    parser.add_argument('-n', dest='num_workers', type=int, default=16,
+    parser.add_argument('-n', dest='num_workers', type=int, default=8,
                         nargs='?', help='Number of training threads')
     parser.add_argument('-s', dest='shuffle', type=int, default=1,
                         nargs='?', help='Shuffle bathces flag')
@@ -68,7 +68,7 @@ def parse_command_line():
 
 def confirm_params():
     tp('d','Continue training? (Y/n) waiting 10s ...')
-    i, o, e = select( [stdin], [], [], 0.0 )
+    i, o, e = select([stdin], [], [], 10.0)
     if i:  # read input
         cont = stdin.readline().strip()
         if cont == 'Y' or cont == 'y':
@@ -87,7 +87,8 @@ def save_model(cmd_args,params,current,best):
     if mrr > best:
         best = mrr
         models_fp = abspath(dirname(trained_models.__file__)) + '/'
-        model_fp = models_fp+ds_name+'_'+exp_name+'_'+str(exp_num)+'.pt'
+        #model_fp = models_fp+ds_name+'_'+exp_name+'_'+str(exp_num)+'.pt'
+        model_fp = models_fp+ds_name+'_'+exp_name+'.pt'
         torch.save(params,model_fp)
         tp('s','New best model for ' + exp_name + ' on ' + ds_name)
         tp('s','Written to: '+model_fp)
@@ -131,9 +132,8 @@ if __name__ == "__main__":
                                               best_performance)
 
             # train
-            trainer.train_epoch()
-            tp('d','Epoch: ' + str(epoch))
-            #tp('d','Total training loss: ' + str(total_loss) + ' for epoch ' + str(epoch))
+            total_loss = trainer.train_epoch()
+            tp('d','Total training loss: ' + str(total_loss) + ' for epoch ' + str(epoch))
     else:
         # sets up for testing
         all_performance = []
