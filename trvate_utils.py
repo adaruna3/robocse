@@ -124,8 +124,11 @@ class Trainer:
         for idx_b,batch in enumerate(self.data_loader):
             bs,br,bo,by = batch
             self.optimizer.zero_grad()
-            loss = self.model.forward(bs.to(self.device),br.to(self.device),
-                                      bo.to(self.device),by.to(self.device))
+            loss = self.model.forward(
+                bs.contiguous().cuda(non_blocking=True),
+                br.contiguous().cuda(non_blocking=True),
+                bo.contiguous().cuda(non_blocking=True),
+                by.contiguous().cuda(non_blocking=True))
             total_loss += loss.cpu().detach().numpy()
             loss.backward()
             self.optimizer.step()
@@ -154,7 +157,8 @@ def training_setup(cmd_args):
                                 batch_size=cmd_args.batch_size,
                                 shuffle=cmd_args.shuffle,
                                 num_workers=cmd_args.num_workers,
-                                collate_fn=train_collate)
+                                collate_fn=train_collate,
+                                pin_memory=True)
     # sets up model
     if cmd_args.exclude_train:
         model = AnalogyReduced(len(dataset.e2i),
@@ -168,7 +172,7 @@ def training_setup(cmd_args):
                         len(dataset.r2i),
                         cmd_args.d_size,
                         cmd_args.device)
-    model.to(cmd_args.device)
+    model.to(cmd_args.device,non_blocking=True)
     # sets up optimization method
     tr_optimizer = initialize_optimizer(cmd_args.opt_method,
                                         cmd_args.opt_params,model)
