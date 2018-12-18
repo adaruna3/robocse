@@ -71,7 +71,7 @@ def confirm_params():
     i, o, e = select([stdin], [], [], 10.0)
     if i:  # read input
         cont = stdin.readline().strip()
-        if cont == 'Y' or cont == 'y':
+        if cont == 'Y' or cont == 'y' or cont == '':
             return True
         else:
             return False
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         va_eval = validation_setup(args)
         # sets up for visualizing training/validation
         #tr_viz,va_viz = valid_visualization_setup(tr_eval,va_eval)
-        va_viz = valid_visualization_setup(va_eval)
+        #va_viz = valid_visualization_setup(va_eval)
         # sets up for saving trained models
         best_performance = 0.0
         # training and validation loop
@@ -124,7 +124,7 @@ if __name__ == "__main__":
                 #tr_performance,tr_loss = tr_eval.evaluate(trainer.model)
                 va_performance,va_loss = va_eval.evaluate(trainer.model)
                 #tr_viz.update(tr_performance,tr_loss,epoch)
-                va_viz.update(va_performance,va_loss,epoch)
+                #va_viz.update(va_performance,va_loss,epoch)
                 # saves trained model by validation performance
                 best_performance = save_model(args,
                                               trainer.model.state_dict(),

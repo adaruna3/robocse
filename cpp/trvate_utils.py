@@ -201,7 +201,6 @@ def valid_collate(batch):
     batch_k = batch[:,:,5].flatten()
     return batch_s,batch_r,batch_o,batch_y,batch_q,batch_k
 
-
 def testing_setup(cmd_args,fold):
     te_tester = Evaluator(cmd_args.ds_name,
                           cmd_args.exp_name+'_'+str(fold)+'_test',
