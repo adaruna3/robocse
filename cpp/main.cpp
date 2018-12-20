@@ -429,106 +429,74 @@ public:
     unordered_map<string, double> evaluate(const Model *model, const SROBucket *bucket, int truncate) {
         // complete training set size
         int N = this->sros.size();
-        
-        // sets the batch size to N
         if (truncate > 0)
             N = min(N, truncate);
 
-        double mrr_s = 0.;
-        double mrr_r = 0.;
-        double mrr_o = 0.;
+        // declares counters for metrics
+        double totals[3][nr];
+        double metric[3][nr][4];
+        for(int i = 0; i < 3; i++){
+            for(int j = 0; j < nr; j++){
+                totals[i][j] = 0.0;
+                for(int k = 0; k < 4; k++){
+                    metric[i][j][k] = 0.0;
+                }
+            }
+        }
 
-        double mrr_s_raw = 0.;
-        double mrr_o_raw = 0.;
-
-        double mr_s = 0.;
-        double mr_r = 0.;
-        double mr_o = 0.;
-
-        double mr_s_raw = 0.;
-        double mr_o_raw = 0.;
-
-        double hits01_s = 0.; 
-        double hits01_r = 0.;
-        double hits01_o = 0.;
-
-        double hits05_s = 0.;
-        double hits05_r = 0.;
-        double hits05_o = 0.;
-
-        double hits10_s = 0.;
-        double hits10_r = 0.;
-        double hits10_o = 0.;
-
-        #pragma omp parallel for reduction(+: mrr_s, mrr_r, mrr_o, mr_s, mr_r, mr_o, \
-                hits01_s, hits01_r, hits01_o, hits05_s, hits05_r, hits05_o, hits10_s, hits10_r, hits10_o)
+        #pragma omp parallel for
         for (int i = 0; i < N; i++) {
             auto ranks1 = this->rank(model, sros[i]);
             auto ranks2 = this->rank(bucket, sros[i]);
-
             double rank_s = abs(get<0>(ranks1)-get<0>(ranks2))+1.0;
             double rank_r = abs(get<1>(ranks1)-get<1>(ranks2))+1.0;
             double rank_o = abs(get<2>(ranks1)-get<2>(ranks2))+1.0;
-            double rank_s_raw = abs(get<3>(ranks1)-get<3>(ranks2))+1.0;
-            double rank_o_raw = abs(get<4>(ranks1)-get<4>(ranks2))+1.0;
-
-            mrr_s += 1./rank_s;
-            mrr_r += 1./rank_r;
-            mrr_o += 1./rank_o;
-            mrr_s_raw += 1./rank_s_raw;
-            mrr_o_raw += 1./rank_o_raw;
-
-            mr_s += rank_s;
-            mr_r += rank_r;
-            mr_o += rank_o;
-            mr_s_raw += rank_s_raw;
-            mr_o_raw += rank_o_raw;
-
-            hits01_s += rank_s_raw <= 01;
-            hits01_r += rank_r <= 01;
-            hits01_o += rank_o_raw <= 01;
-
-            hits05_s += rank_s_raw <= 05;
-            hits05_r += rank_r <= 05;
-            hits05_o += rank_o_raw <= 05;
-
-            hits10_s += rank_s_raw <= 10;
-            hits10_r += rank_r <= 10;
-            hits10_o += rank_o_raw <= 10;
+            int r = get<1>(sros[i]);
+            #pragma omp critical
+            {
+                // MRR*
+                metric[0][r][0] += 1./rank_s;
+                metric[1][r][0] += 1./rank_r;
+                metric[2][r][0] += 1./rank_o;
+                // HITS10*
+                metric[0][r][1] += rank_s <= 01;
+                metric[1][r][1] += rank_r <= 01;
+                metric[2][r][1] += rank_o <= 01;
+                // HITS5*
+                metric[0][r][2] += rank_s <= 05;
+                metric[1][r][2] += rank_r <= 05;
+                metric[2][r][2] += rank_o <= 05;
+                // HITS1*
+                metric[0][r][3] += rank_s <= 10;
+                metric[1][r][3] += rank_r <= 10;
+                metric[2][r][3] += rank_o <= 10;
+                // Totals
+                totals[0][r] += 1.0;
+                totals[1][r] += 1.0;
+                totals[2][r] += 1.0;
+            }
         }
 
         unordered_map<string, double> info;
-
-        info["mrr_s"] = mrr_s / N;
-        info["mrr_r"] = mrr_r / N;
-        info["mrr_o"] = mrr_o / N;
-        info["mrr_s_raw"] = mrr_s_raw / N;
-        info["mrr_o_raw"] = mrr_o_raw / N;
-
-        info["mr_s"] = mr_s / N;
-        info["mr_r"] = mr_r / N;
-        info["mr_o"] = mr_o / N;
-        info["mr_s_raw"] = mr_s_raw / N;
-        info["mr_o_raw"] = mr_o_raw / N;
-
-        info["hits01_s"] = hits01_s / N; 
-        info["hits01_r"] = hits01_r / N;
-        info["hits01_o"] = hits01_o / N;
-
-        info["hits05_s"] = hits05_s / N;
-        info["hits05_r"] = hits05_r / N;
-        info["hits05_o"] = hits05_o / N;
-                                      
-        info["hits10_s"] = hits10_s / N;
-        info["hits10_r"] = hits10_r / N;
-        info["hits10_o"] = hits10_o / N;
+        info["mrr_s"] = metric[0][0][0] / totals[0][0];
+        info["mrr_r"] = metric[1][0][0] / totals[1][0];
+        info["mrr_o"] = metric[2][0][0] / totals[2][0];
+        info["hits10_s"] = metric[0][0][1] / totals[0][0];
+        info["hits10_r"] = metric[1][0][1] / totals[1][0];
+        info["hits10_o"] = metric[2][0][1] / totals[2][0];
+        info["hits05_s"] = metric[0][0][2] / totals[0][0];
+        info["hits05_r"] = metric[1][0][2] / totals[1][0];
+        info["hits05_o"] = metric[2][0][2] / totals[2][0];
+        info["hits01_s"] = metric[0][0][3] / totals[0][0];
+        info["hits01_r"] = metric[1][0][3] / totals[1][0];
+        info["hits01_o"] = metric[2][0][3] / totals[2][0];
 
         return info;
     }
 
 private:
 
-    tuple<double, double, double, double, double> rank(const SROBucket *model, const triplet& sro) {
+    tuple<double, double, double> rank(const SROBucket *model, const triplet& sro) {
         int rank_s = 1;
         int rank_r = 1;
         int rank_o = 1;
@@ -548,19 +516,10 @@ private:
         for (int oo = 0; oo < ne; oo++)
             if (model->score(s, r, oo) > base_score) rank_o++;
 
-        int rank_s_raw = rank_s;
-        int rank_o_raw = rank_o;
-
-        for (auto ss : sro_bucket.or2s(o, r))
-            if (model->score(ss, r, o) > base_score) rank_s--;
-
-        for (auto oo : sro_bucket.sr2o(s, r))
-            if (model->score(s, r, oo) > base_score) rank_o--;
-
-        return make_tuple(rank_s, rank_r, rank_o, rank_s_raw, rank_o_raw);
+        return make_tuple(rank_s, rank_r, rank_o);
     }
 
-    tuple<double, double, double, double, double> rank(const Model *model, const triplet& sro) {
+    tuple<double, double, double> rank(const Model *model, const triplet& sro) {
         int rank_s = 1;
         int rank_r = 1;
         int rank_o = 1;
@@ -583,36 +542,21 @@ private:
         for (int oo = 0; oo < ne; oo++)
             if (model->score(s, r, oo) > base_score) rank_o++;
 
-        int rank_s_raw = rank_s;
-        int rank_o_raw = rank_o;
-
-        for (auto ss : sro_bucket.or2s(o, r))
-            if (model->score(ss, r, o) > base_score) rank_s--;
-
-        for (auto oo : sro_bucket.sr2o(s, r))
-            if (model->score(s, r, oo) > base_score) rank_o--;
-
-        return make_tuple(rank_s, rank_r, rank_o, rank_s_raw, rank_o_raw);
+        return make_tuple(rank_s, rank_r, rank_o);
     }
 };
 
 void pretty_print(const char* prefix, const unordered_map<string, double>& info) {
     printf("%s  MRR    \t%.2f\t%.2f\t%.2f\n", prefix, 100*info.at("mrr_s"),    100*info.at("mrr_r"),    100*info.at("mrr_o"));
-    printf("%s  MRR_RAW\t%.2f\t%.2f\n", prefix, 100*info.at("mrr_s_raw"),    100*info.at("mrr_o_raw"));
-    printf("%s  MR     \t%.2f\t%.2f\t%.2f\n", prefix, info.at("mr_s"), info.at("mr_r"), info.at("mr_o"));
-    printf("%s  MR_RAW \t%.2f\t%.2f\n", prefix, info.at("mr_s_raw"), info.at("mr_o_raw"));
     printf("%s  Hits@01\t%.2f\t%.2f\t%.2f\n", prefix, 100*info.at("hits01_s"), 100*info.at("hits01_r"), 100*info.at("hits01_o"));
-    printf("%s  Hits@03\t%.2f\t%.2f\t%.2f\n", prefix, 100*info.at("hits05_s"), 100*info.at("hits05_r"), 100*info.at("hits05_o"));
+    printf("%s  Hits@05\t%.2f\t%.2f\t%.2f\n", prefix, 100*info.at("hits05_s"), 100*info.at("hits05_r"), 100*info.at("hits05_o"));
     printf("%s  Hits@10\t%.2f\t%.2f\t%.2f\n", prefix, 100*info.at("hits10_s"), 100*info.at("hits10_r"), 100*info.at("hits10_o"));
 }
 
 void pretty_print2(const char* prefix, const unordered_map<string, double>& info, std::ofstream& fp) {
     fp << prefix << "  MRR    " << 100*info.at("mrr_s") <<  "  " << 100*info.at("mrr_r") <<  "  " << 100*info.at("mrr_o") << "\n";
-    fp << prefix << "  MRR_RAW " << 100*info.at("mrr_s_raw") << "  " << 100*info.at("mrr_o_raw") << "\n";
-    fp << prefix << "  MR     " << info.at("mr_s") << "  " << info.at("mr_r") << "  " << info.at("mr_o") << "\n";
-    fp << prefix << "  MR_RAW " << info.at("mr_s_raw") << "  " << info.at("mr_o_raw") << "\n";
     fp << prefix << "  Hits@01 " << 100*info.at("hits01_s") << "  " << 100*info.at("hits01_r") << "  " << 100*info.at("hits01_o") << "\n";
-    fp << prefix << "  Hits@03 " << 100*info.at("hits05_s") << "  " << 100*info.at("hits05_r") << "  " << 100*info.at("hits05_o") << "\n";
+    fp << prefix << "  Hits@05 " << 100*info.at("hits05_s") << "  " << 100*info.at("hits05_r") << "  " << 100*info.at("hits05_o") << "\n";
     fp << prefix << "  Hits@10 " << 100*info.at("hits10_s") << "  " << 100*info.at("hits10_r") << "  " << 100*info.at("hits10_o") << "\n";
 }
 
@@ -628,9 +572,6 @@ int ArgPos(char *str, int argc, char **argv) {
     }
     return -1;
 }
-
-
-
 
 
 int main(int argc, char **argv) {
@@ -796,22 +737,11 @@ int main(int argc, char **argv) {
             
             logfile << "\n";
             
-            cout << "mrr diff " 
-                << abs(100.0*curr_mrr_raw - 100.0*last_mrr) << endl;
-            cout << "hit s diff " 
-                << abs(100.0*info_va.at("hits01_s")-100.0*last_hits) << endl;
-            cout << "hit r diff " 
-                << abs(100.0*info_va.at("hits01_r")-100.0*last_hitr) << endl;
-            cout << "hit o diff " 
-                << abs(100.0*info_va.at("hits01_o")-100.0*last_hito) << endl;
-            
-            
-            /*if ( (abs(100.0*curr_mrr_raw - 100.0*last_mrr) < 2.0) && 
-                    (abs(100.0*info_va.at("hits01_s")-100.0*last_hits)<2.0) &&
-                    (abs(100.0*info_va.at("hits01_r")-100.0*last_hitr)<2.0) &&
-                    (abs(100.0*info_va.at("hits01_o")-100.0*last_hito)<2.0) ) {
-                return 0;
-            }*/
+            cout << "mrr diff " << abs(100.0*curr_mrr_raw - 100.0*last_mrr) << endl;
+            cout << "hit s diff " << abs(100.0*info_va.at("hits01_s")-100.0*last_hits) << endl;
+            cout << "hit r diff " << abs(100.0*info_va.at("hits01_r")-100.0*last_hitr) << endl;
+            cout << "hit o diff " << abs(100.0*info_va.at("hits01_o")-100.0*last_hito) << endl;
+
             last_hits = info_va.at("hits01_s");
             last_hito = info_va.at("hits01_o");
             last_hitr = info_va.at("hits01_r");
