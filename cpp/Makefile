@@ -1,15 +1,8 @@
-all:
-	g++ main.cpp -fopenmp -Wall -O3 -std=c++11 -o main
-	#g++ main_negsamp1.cpp -fopenmp -Wall -O3 -std=c++11 -o main_negsamp1
-	#g++ main_negsamp2.cpp -fopenmp -Wall -O3 -std=c++11 -o main_negsamp2
-	g++ main_negsamp3.cpp -fopenmp -Wall -O3 -std=c++11 -o main_negsamp3
-	#g++ -g main.cpp -fopenmp -Wall -std=c++11 -o main
-	#g++ -g main_negsamp1.cpp -fopenmp -Wall -std=c++11 -o main_negsamp1
-	#g++ -g main_negsamp2.cpp -fopenmp -Wall -std=c++11 -o main_negsamp2
-	#g++ main_negsamp3.cpp -fopenmp -Wall -std=c++11 -o main_negsamp3
+opt:
+	g++ main.cpp -fopenmp -Wall -O3 -std=c++11 -o opt_main
+debug:
+	g++ -g main.cpp -fopenmp -Wall -std=c++11 -o debug_main
 
 clean:
-	rm -f *.o main
-	rm -f *.o main_negsamp1
-	rm -f *.o main_negsamp2
-	rm -f *.o main_negsamp3
+	rm -f *.o opt_main
+	rm -f *.o debug_main

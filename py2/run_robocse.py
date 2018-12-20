@@ -87,8 +87,8 @@ def save_model(cmd_args,params,current,best):
     if mrr > best:
         best = mrr
         models_fp = abspath(dirname(trained_models.__file__)) + '/'
-        #model_fp = models_fp+ds_name+'_'+exp_name+'_'+str(exp_num)+'.pt'
-        model_fp = models_fp+ds_name+'_'+exp_name+'.pt'
+        model_fp = models_fp+ds_name+'_'+exp_name+'_'+str(exp_num)+'.pt'
+        #model_fp = models_fp+ds_name+'_'+exp_name+'.pt'
         torch.save(params,model_fp)
         tp('s','New best model for ' + exp_name + ' on ' + ds_name)
         tp('s','Written to: '+model_fp)

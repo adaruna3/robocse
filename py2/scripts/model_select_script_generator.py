@@ -3,7 +3,7 @@ wdrs = [1e-2,1e-3,1e-4,1e-5]
 bss = [50,100,200,400]
 nds = [80,160,240,320]
 command_root = "python run_robocse.py sd_thor tg_all_"
-fixed_args = '-m adagrad -bc 7'
+fixed_args = ' -m adagrad -bc 7'
 
 with open('search_hyper_params.sh','w') as f:
     f.write("#!/bin/bash\n")
