@@ -443,7 +443,7 @@ public:
                 }
             }
         }
-
+        // calculates metrics in parallel
         #pragma omp parallel for
         for (int i = 0; i < N; i++) {
             auto ranks1 = this->rank(model, sros[i]);
@@ -452,31 +452,27 @@ public:
             double rank_r = abs(get<1>(ranks1)-get<1>(ranks2))+1.0;
             double rank_o = abs(get<2>(ranks1)-get<2>(ranks2))+1.0;
             int r = get<1>(sros[i]);
-            #pragma omp critical
-            {
-                // MRR*
-                metric[0][r][0] += 1./rank_s;
-                metric[1][r][0] += 1./rank_r;
-                metric[2][r][0] += 1./rank_o;
-                // HITS10*
-                metric[0][r][1] += rank_s <= 01;
-                metric[1][r][1] += rank_r <= 01;
-                metric[2][r][1] += rank_o <= 01;
-                // HITS5*
-                metric[0][r][2] += rank_s <= 05;
-                metric[1][r][2] += rank_r <= 05;
-                metric[2][r][2] += rank_o <= 05;
-                // HITS1*
-                metric[0][r][3] += rank_s <= 10;
-                metric[1][r][3] += rank_r <= 10;
-                metric[2][r][3] += rank_o <= 10;
-                // Totals
-                totals[0][r] += 1.0;
-                totals[1][r] += 1.0;
-                totals[2][r] += 1.0;
-            }
+            // MRR*
+            metric[0][r][0] += 1./rank_s;
+            metric[1][r][0] += 1./rank_r;
+            metric[2][r][0] += 1./rank_o;
+            // HITS10*
+            metric[0][r][1] += rank_s <= 10;
+            metric[1][r][1] += rank_r <= 10;
+            metric[2][r][1] += rank_o <= 10;
+            // HITS5*
+            metric[0][r][2] += rank_s <= 05;
+            metric[1][r][2] += rank_r <= 05;
+            metric[2][r][2] += rank_o <= 05;
+            // HITS1*
+            metric[0][r][3] += rank_s <= 01;
+            metric[1][r][3] += rank_r <= 01;
+            metric[2][r][3] += rank_o <= 01;
+            // Totals
+            totals[0][r] += 1.0;
+            totals[1][r] += 1.0;
+            totals[2][r] += 1.0;
         }
-
         unordered_map<string, double> info;
         info["mrr_s"] = metric[0][0][0] / totals[0][0];
         info["mrr_r"] = metric[1][0][0] / totals[1][0];
@@ -490,7 +486,6 @@ public:
         info["hits01_s"] = metric[0][0][3] / totals[0][0];
         info["hits01_r"] = metric[1][0][3] / totals[1][0];
         info["hits01_o"] = metric[2][0][3] / totals[2][0];
-
         return info;
     }
 
@@ -578,7 +573,7 @@ int main(int argc, char **argv) {
     // default options
     string  ddir        = "./datasets/";
     string  dataset     =  "sd_thor"; // training set
-    string  experiment  =  "_tg_all_0"; // training set
+    string  experiment  =  "tg_all_0"; // training set
     int     embed_dim   =  100; // dimensionality of the embedding
     double  eta         =  0.1; // related to learning rate
     double  gamma       =  1e-3; // related to gradient
@@ -599,7 +594,6 @@ int main(int argc, char **argv) {
     if ((i = ArgPos((char *)"-num_epoch",  argc, argv)) > 0)  num_epoch   =  atoi(argv[i+1]);
     if ((i = ArgPos((char *)"-num_thread", argc, argv)) > 0)  num_thread  =  atoi(argv[i+1]);
     if ((i = ArgPos((char *)"-eval_freq",  argc, argv)) > 0)  eval_freq   =  atoi(argv[i+1]);
-    if ((i = ArgPos((char *)"-model_path", argc, argv)) > 0)  model_path  =  string(argv[i+1]);
     if ((i = ArgPos((char *)"-dataset",    argc, argv)) > 0)  dataset     =  string(argv[i+1]);
     if ((i = ArgPos((char *)"-experiment", argc, argv)) > 0)  experiment  =  string(argv[i+1]);
     if ((i = ArgPos((char *)"-prediction", argc, argv)) > 0)  prediction  =  true;
@@ -616,6 +610,7 @@ int main(int argc, char **argv) {
     printf("num_epoch   =  %d\n", num_epoch);
     printf("num_thread  =  %d\n", num_thread);
     printf("eval_freq   =  %d\n", eval_freq);
+    model_path = "./trained_models/" + dataset + "_" + experiment;
     printf("model_path  =  %s\n", model_path.c_str());
     printf("num_scalar  =  %d\n", num_scalar);
     printf("train_size  =  %d\n", train_size);
@@ -628,9 +623,9 @@ int main(int argc, char **argv) {
     int ne = ent_map.size();
     int nr = rel_map.size();
     // loads the train, test, and validation triplets from each dataset
-    vector<triplet> sros_tr = create_sros(ddir+dataset+experiment+"_train.csv",ent_map,rel_map);
-    vector<triplet> sros_va = create_sros(ddir+dataset+experiment+"_valid.csv",ent_map,rel_map);
-    vector<triplet> sros_te = create_sros(ddir+dataset+experiment+"_test.csv",ent_map,rel_map);
+    vector<triplet> sros_tr = create_sros(ddir+dataset+"_"+experiment+"_train.csv",ent_map,rel_map);
+    vector<triplet> sros_va = create_sros(ddir+dataset+"_"+experiment+"_valid.csv",ent_map,rel_map);
+    vector<triplet> sros_te = create_sros(ddir+dataset+"_"+experiment+"_test.csv",ent_map,rel_map);
     vector<triplet> sros_al;
     // store all the triplets in sros_al
     sros_al.insert(sros_al.end(), sros_tr.begin(), sros_tr.end());
@@ -695,12 +690,11 @@ int main(int argc, char **argv) {
             elapse_ev = omp_get_wtime() - start_e;
 
             // save the best model to disk
-            double curr_mrr_raw = (info_va["mrr_s_raw"]+info_va["mrr_o_raw"])/2;
             double curr_hits = (info_va["hits10_o"] + info_va["hits10_s"])/2;
             double curr_mrr = (info_va["mrr_s"] + info_va["mrr_o"])/2;
-            
-            if (curr_mrr_raw > best_mrr) {
-                best_mrr = curr_mrr_raw;
+
+            if (curr_mrr > best_mrr) {
+                best_mrr = curr_mrr;
                 if ( !model_path.empty() )
                     model->save(model_path+".model");
             }
@@ -713,9 +707,8 @@ int main(int argc, char **argv) {
             printf("\n");
             pretty_print("VA", info_va);
             printf("\n");
-            printf("VA  MRR_BEST_RAW    %.2f\n", 100*best_mrr);
+            printf("VA  MRR_BEST    %.2f\n", 100*best_mrr);
             printf("VA  HITS_CURR    %.2f\n", 100*curr_hits);
-            printf("VA  MRR_CURR_RAW    %.2f\n", 100*curr_mrr_raw);
             printf("VA  MRR_CURR    %.2f\n", 100*curr_mrr);
             printf("\n");
             
@@ -730,14 +723,13 @@ int main(int argc, char **argv) {
             pretty_print2("VA", info_va, logfile);
             logfile << "\n";
             
-            logfile << "VA  MRR_BEST_RAW    " << 100*best_mrr << endl;
+            logfile << "VA  MRR_BEST    " << 100*best_mrr << endl;
             logfile << "VA  HITS_CURR    " << 100*curr_hits << endl;
-            logfile << "VA  MRR_CURR_RAW    " << 100*curr_mrr_raw << endl;
             logfile << "VA  MRR_CURR    " << 100*curr_mrr << endl;
             
             logfile << "\n";
             
-            cout << "mrr diff " << abs(100.0*curr_mrr_raw - 100.0*last_mrr) << endl;
+            cout << "mrr diff " << abs(100.0*curr_mrr - 100.0*last_mrr) << endl;
             cout << "hit s diff " << abs(100.0*info_va.at("hits01_s")-100.0*last_hits) << endl;
             cout << "hit r diff " << abs(100.0*info_va.at("hits01_r")-100.0*last_hitr) << endl;
             cout << "hit o diff " << abs(100.0*info_va.at("hits01_o")-100.0*last_hito) << endl;
@@ -745,7 +737,7 @@ int main(int argc, char **argv) {
             last_hits = info_va.at("hits01_s");
             last_hito = info_va.at("hits01_o");
             last_hitr = info_va.at("hits01_r");
-            last_mrr = curr_mrr_raw;
+            last_mrr = curr_mrr;
         }
         
         // shuffles all the numbers corresponding to each example
