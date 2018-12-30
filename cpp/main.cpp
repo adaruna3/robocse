@@ -12,6 +12,7 @@
 #include <cassert>
 #include <cstring>
 #include <iterator>
+#include <stdio.h>
 
 
 using namespace std;
@@ -236,12 +237,11 @@ protected:
     const double init_b = 1e-2;
     const double init_e = 1e-6;
 
+public:
     vector<vector<double>> E; // entity embeddings
     vector<vector<double>> R; // relation embeddings
     vector<vector<double>> E_g; // entity matrix for adagrad
     vector<vector<double>> R_g; // relation matrix for adagrad
-
-public:
 
     Model(double eta, double gamma) {
         this->eta = eta; // related to learning rate in adagrad
@@ -269,6 +269,7 @@ public:
     void load(const string& fname) {
         // loads a KGE model from the file fname as ifstream
         ifstream ifs(fname, ios::in);
+        assert(!ifs.fail());
 
         for (unsigned i = 0; i < E.size(); i++)
             for (unsigned j = 0; j < E[i].size(); j++)
@@ -426,23 +427,29 @@ public:
         // bucket        
         ne(ne), nr(nr), sros(sros), sro_bucket(sro_bucket) {}
 
-    unordered_map<string, double> evaluate(const Model *model, const SROBucket *bucket, int truncate) {
+    std::vector<std::vector<std::vector<double>>> evaluate(const Model *model, const SROBucket *bucket, int truncate) {
         // complete training set size
         int N = this->sros.size();
         if (truncate > 0)
             N = min(N, truncate);
 
         // declares counters for metrics
-        double totals[3][nr];
-        double metric[3][nr][4];
+        vector<vector<double>> totals;
+        vector<vector<vector<double>>> metric;
+        totals.resize(3);
+        metric.resize(3);
         for(int i = 0; i < 3; i++){
+            totals[i].resize(nr);
+            metric[i].resize(nr);
             for(int j = 0; j < nr; j++){
                 totals[i][j] = 0.0;
+                metric[i][j].resize(4);
                 for(int k = 0; k < 4; k++){
                     metric[i][j][k] = 0.0;
                 }
             }
         }
+
         // calculates metrics in parallel
         #pragma omp parallel for
         for (int i = 0; i < N; i++) {
@@ -452,41 +459,48 @@ public:
             double rank_r = abs(get<1>(ranks1)-get<1>(ranks2))+1.0;
             double rank_o = abs(get<2>(ranks1)-get<2>(ranks2))+1.0;
             int r = get<1>(sros[i]);
-            // MRR*
-            metric[0][r][0] += 1./rank_s;
-            metric[1][r][0] += 1./rank_r;
-            metric[2][r][0] += 1./rank_o;
-            // HITS10*
-            metric[0][r][1] += rank_s <= 10;
-            metric[1][r][1] += rank_r <= 10;
-            metric[2][r][1] += rank_o <= 10;
-            // HITS5*
-            metric[0][r][2] += rank_s <= 05;
-            metric[1][r][2] += rank_r <= 05;
-            metric[2][r][2] += rank_o <= 05;
-            // HITS1*
-            metric[0][r][3] += rank_s <= 01;
-            metric[1][r][3] += rank_r <= 01;
-            metric[2][r][3] += rank_o <= 01;
-            // Totals
-            totals[0][r] += 1.0;
-            totals[1][r] += 1.0;
-            totals[2][r] += 1.0;
+            #pragma omp critical
+            {
+                // MRR*
+                metric[0][r][0] += 1.0/rank_s;
+                metric[1][0][0] += 1.0/rank_r;
+                metric[2][r][0] += 1.0/rank_o;
+                // HITS10*
+                metric[0][r][1] += rank_s <= 10;
+                metric[1][0][1] += rank_r <= 10;
+                metric[2][r][1] += rank_o <= 10;
+                // HITS5*
+                metric[0][r][2] += rank_s <= 05;
+                metric[1][0][2] += rank_r <= 05;
+                metric[2][r][2] += rank_o <= 05;
+                // HITS1*
+                metric[0][r][3] += rank_s <= 01;
+                metric[1][0][3] += rank_r <= 01;
+                metric[2][r][3] += rank_o <= 01;
+                // Totals
+                totals[0][r] += 1.0;
+                totals[1][0] += 1.0;
+                totals[2][r] += 1.0;
+            }
         }
-        unordered_map<string, double> info;
-        info["mrr_s"] = metric[0][0][0] / totals[0][0];
-        info["mrr_r"] = metric[1][0][0] / totals[1][0];
-        info["mrr_o"] = metric[2][0][0] / totals[2][0];
-        info["hits10_s"] = metric[0][0][1] / totals[0][0];
-        info["hits10_r"] = metric[1][0][1] / totals[1][0];
-        info["hits10_o"] = metric[2][0][1] / totals[2][0];
-        info["hits05_s"] = metric[0][0][2] / totals[0][0];
-        info["hits05_r"] = metric[1][0][2] / totals[1][0];
-        info["hits05_o"] = metric[2][0][2] / totals[2][0];
-        info["hits01_s"] = metric[0][0][3] / totals[0][0];
-        info["hits01_r"] = metric[1][0][3] / totals[1][0];
-        info["hits01_o"] = metric[2][0][3] / totals[2][0];
-        return info;
+
+        for(int i = 0; i < 3; i++) {
+            if (i == 1) {
+                metric[i][0][0] = metric[i][0][0] / totals[i][0];
+                metric[i][0][1] = metric[i][0][1] / totals[i][0];
+                metric[i][0][2] = metric[i][0][2] / totals[i][0];
+                metric[i][0][3] = metric[i][0][3] / totals[i][0];
+                continue;
+            }
+            for(int j = 0; j < nr; j++) {
+                metric[i][j][0] = metric[i][j][0] / totals[i][j];
+                metric[i][j][1] = metric[i][j][1] / totals[i][j];
+                metric[i][j][2] = metric[i][j][2] / totals[i][j];
+                metric[i][j][3] = metric[i][j][3] / totals[i][j];
+            }
+        }
+
+        return metric;
     }
 
 private:
@@ -541,18 +555,31 @@ private:
     }
 };
 
-void pretty_print(const char* prefix, const unordered_map<string, double>& info) {
-    printf("%s  MRR    \t%.2f\t%.2f\t%.2f\n", prefix, 100*info.at("mrr_s"),    100*info.at("mrr_r"),    100*info.at("mrr_o"));
-    printf("%s  Hits@01\t%.2f\t%.2f\t%.2f\n", prefix, 100*info.at("hits01_s"), 100*info.at("hits01_r"), 100*info.at("hits01_o"));
-    printf("%s  Hits@05\t%.2f\t%.2f\t%.2f\n", prefix, 100*info.at("hits05_s"), 100*info.at("hits05_r"), 100*info.at("hits05_o"));
-    printf("%s  Hits@10\t%.2f\t%.2f\t%.2f\n", prefix, 100*info.at("hits10_s"), 100*info.at("hits10_r"), 100*info.at("hits10_o"));
+void eval_log(const char* prefix, const vector<vector<vector<double>>>& info) {
+    FILE * pFile;
+    pFile = fopen("logfile.txt","a");
+    fprintf(pFile,"------------------%s---------------------\n", prefix);
+    fprintf(pFile," Query | Relation |    MRR | Hits10 |  Hits5 |  Hits1 \n");
+    fprintf(pFile,"  Sro  | atLoc    | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[0][0][0],100.0*info[0][0][1],100.0*info[0][0][2],100.0*info[0][0][3]);
+    fprintf(pFile,"  Sro  | hasMat   | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[0][1][0],100.0*info[0][1][1],100.0*info[0][1][2],100.0*info[0][1][3]);
+    fprintf(pFile,"  Sro  | hasAff   | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[0][2][0],100.0*info[0][2][1],100.0*info[0][2][2],100.0*info[0][2][3]);
+    fprintf(pFile,"  sRo  |          | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[1][0][0],100.0*info[1][0][1],100.0*info[1][0][2],100.0*info[1][0][3]);
+    fprintf(pFile,"  srO  | atLoc    | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[2][0][0],100.0*info[2][0][1],100.0*info[2][0][2],100.0*info[2][0][3]);
+    fprintf(pFile,"  srO  | hasMat   | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[2][1][0],100.0*info[2][1][1],100.0*info[2][1][2],100.0*info[2][1][3]);
+    fprintf(pFile,"  srO  | hasAff   | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[2][2][0],100.0*info[2][2][1],100.0*info[2][2][2],100.0*info[2][2][3]);
+    fclose(pFile);
 }
 
-void pretty_print2(const char* prefix, const unordered_map<string, double>& info, std::ofstream& fp) {
-    fp << prefix << "  MRR    " << 100*info.at("mrr_s") <<  "  " << 100*info.at("mrr_r") <<  "  " << 100*info.at("mrr_o") << "\n";
-    fp << prefix << "  Hits@01 " << 100*info.at("hits01_s") << "  " << 100*info.at("hits01_r") << "  " << 100*info.at("hits01_o") << "\n";
-    fp << prefix << "  Hits@05 " << 100*info.at("hits05_s") << "  " << 100*info.at("hits05_r") << "  " << 100*info.at("hits05_o") << "\n";
-    fp << prefix << "  Hits@10 " << 100*info.at("hits10_s") << "  " << 100*info.at("hits10_r") << "  " << 100*info.at("hits10_o") << "\n";
+void eval_print(const char* prefix, const vector<vector<vector<double>>>& info) {
+    printf("------------------%s---------------------\n", prefix);
+    printf(" Query | Relation |    MRR | Hits10 |  Hits5 |  Hits1 \n");
+    printf("  Sro  | atLoc    | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[0][0][0],100.0*info[0][0][1],100.0*info[0][0][2],100.0*info[0][0][3]);
+    printf("  Sro  | hasMat   | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[0][1][0],100.0*info[0][1][1],100.0*info[0][1][2],100.0*info[0][1][3]);
+    printf("  Sro  | hasAff   | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[0][2][0],100.0*info[0][2][1],100.0*info[0][2][2],100.0*info[0][2][3]);
+    printf("  sRo  |          | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[1][0][0],100.0*info[1][0][1],100.0*info[1][0][2],100.0*info[1][0][3]);
+    printf("  srO  | atLoc    | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[2][0][0],100.0*info[2][0][1],100.0*info[2][0][2],100.0*info[2][0][3]);
+    printf("  srO  | hasMat   | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[2][1][0],100.0*info[2][1][1],100.0*info[2][1][2],100.0*info[2][1][3]);
+    printf("  srO  | hasAff   | %6.2f | %6.2f | %6.2f | %6.2f \n", 100.0*info[2][2][0],100.0*info[2][2][1],100.0*info[2][2][2],100.0*info[2][2][3]);
 }
 
 // based on Google's word2vec
@@ -568,6 +595,24 @@ int ArgPos(char *str, int argc, char **argv) {
     return -1;
 }
 
+void fold_sum(vector<vector<vector<double>>>& metric_total, vector<vector<vector<double>>>& metric) {
+    for(int i = 0; i < 3; i++){
+        for(int j = 0; j < metric_total[0].size(); j++){
+            for(int k = 0; k < 4; k++){
+                metric_total[i][j][k] += 0.2 * metric[i][j][k];
+            }
+        }
+    }
+}
+
+double condense_mrr(vector<vector<vector<double>>>& metric) {
+    double mean_mrr = 0.0;
+    for (int i=0;i<metric[0].size();i++) {
+        mean_mrr += (metric[0][i][0] + metric[2][i][0])/2.0;
+    }
+    mean_mrr = mean_mrr / metric[0].size();
+    return mean_mrr;
+}
 
 int main(int argc, char **argv) {
     // default options
@@ -622,18 +667,13 @@ int main(int argc, char **argv) {
     unordered_map<string, int> rel_map = create_id_mapping(rels);
     int ne = ent_map.size();
     int nr = rel_map.size();
+
     // loads the train, test, and validation triplets from each dataset
-    vector<triplet> sros_tr = create_sros(ddir+dataset+"_"+experiment+"_train.csv",ent_map,rel_map);
-    vector<triplet> sros_va = create_sros(ddir+dataset+"_"+experiment+"_valid.csv",ent_map,rel_map);
-    vector<triplet> sros_te = create_sros(ddir+dataset+"_"+experiment+"_test.csv",ent_map,rel_map);
+    vector<triplet> sros_tr;
+    vector<triplet> sros_va;
+    vector<triplet> sros_te;
     vector<triplet> sros_al;
-    // store all the triplets in sros_al
-    sros_al.insert(sros_al.end(), sros_tr.begin(), sros_tr.end());
-    sros_al.insert(sros_al.end(), sros_va.begin(), sros_va.end());
-    sros_al.insert(sros_al.end(), sros_te.begin(), sros_te.end());
-    // creates a 'bucket' object of all s,r,o triplets, used later
-    SROBucket sro_bucket_al(sros_al);
-    SROBucket *sro_bucket = &sro_bucket_al;
+
     // initializes the ANALOGY model for use
     Model *model = NULL;
     model = new Analogy(ne,nr,embed_dim,num_scalar,eta,gamma);
@@ -641,19 +681,61 @@ int main(int argc, char **argv) {
     
     // checks if we are in the testing phase of program
     if (prediction) {
-        // if so creates the testing evaluator
-        Evaluator evaluator_te(ne, nr, sros_te, sro_bucket_al);
-        model->load(model_path);
-        auto info_te = evaluator_te.evaluate(model, sro_bucket, -1);
-        pretty_print("TE", info_te);
+        vector<vector<vector<double>>> info_test_avg;
+        info_test_avg.resize(3);
+        for(int i = 0; i < 3; i++){
+            info_test_avg[i].resize(nr);
+            for(int j = 0; j < nr; j++){
+                info_test_avg[i][j].resize(4);
+                for(int k = 0; k < 4; k++){
+                    info_test_avg[i][j][k] = 0.0;
+                }
+            }
+        }
+
+        string fold_name;
+        string model_fold_path;
+        for (int i=0;i<5;i++) {
+            fold_name = ddir+dataset+"_"+experiment+"_"+to_string(i);
+            model_fold_path = model_path+"_"+to_string(i)+".model";
+            sros_tr = create_sros(fold_name+"_train.csv",ent_map,rel_map);
+            sros_va = create_sros(fold_name+"_valid.csv",ent_map,rel_map);
+            sros_te = create_sros(fold_name+"_test.csv",ent_map,rel_map);
+            sros_al.clear();
+            sros_al.insert(sros_al.end(), sros_tr.begin(), sros_tr.end());
+            sros_al.insert(sros_al.end(), sros_va.begin(), sros_va.end());
+            sros_al.insert(sros_al.end(), sros_te.begin(), sros_te.end());
+
+            // creates a 'bucket' object of all s,r,o triplets, used later
+            SROBucket sro_bucket_al(sros_al);
+            SROBucket *sro_bucket = &sro_bucket_al;
+
+            Evaluator evaluator_te(ne, nr, sros_te, sro_bucket_al);
+            model->load(model_fold_path);
+            vector<vector<vector<double>>> info_test = evaluator_te.evaluate(model,sro_bucket,-1);
+            //eval_print("FOLD EVALUATION",info_test);
+            fold_sum(info_test_avg, info_test);
+        }
+        eval_print("VALID EVALUATION",info_test_avg);
         return 0;
     }
+
+    // loads the train, test, and validation triplets from each dataset
+    sros_tr = create_sros(ddir+dataset+"_"+experiment+"_train.csv",ent_map,rel_map);
+    sros_va = create_sros(ddir+dataset+"_"+experiment+"_valid.csv",ent_map,rel_map);
+    sros_te = create_sros(ddir+dataset+"_"+experiment+"_test.csv",ent_map,rel_map);
+    // store all the triplets in sros_al
+    sros_al.insert(sros_al.end(), sros_tr.begin(), sros_tr.end());
+    sros_al.insert(sros_al.end(), sros_va.begin(), sros_va.end());
+    sros_al.insert(sros_al.end(), sros_te.begin(), sros_te.end());
+    // creates a 'bucket' object of all s,r,o triplets, used later
+    SROBucket sro_bucket_al(sros_al);
+    SROBucket *sro_bucket = &sro_bucket_al;
     
     // evaluator for validation data
     Evaluator evaluator_va(ne, nr, sros_va, sro_bucket_al);
     // evaluator for training data
     Evaluator evaluator_tr(ne, nr, sros_tr, sro_bucket_al);
-
 
     // thread-specific negative samplers
     vector<NegativeSampler> neg_samplers;
@@ -667,15 +749,10 @@ int main(int argc, char **argv) {
 
     clock_t start_e;
     clock_t start_t;
-    double elapse_tr = 0;
-    double elapse_ev = 0;
+    double elapse_tr;
+    double elapse_ev;
     double best_mrr = 0;
-    
-    double last_mrr = 0;
-    
-    double last_hits = 0;
-    double last_hito = 0;
-    double last_hitr = 0;
+    double last_mrr;
     
     omp_set_num_threads(num_thread); // tells omp lib num of threads to use
 
@@ -690,54 +767,16 @@ int main(int argc, char **argv) {
             elapse_ev = omp_get_wtime() - start_e;
 
             // save the best model to disk
-            double curr_hits = (info_va["hits10_o"] + info_va["hits10_s"])/2;
-            double curr_mrr = (info_va["mrr_s"] + info_va["mrr_o"])/2;
-
+            double curr_mrr = condense_mrr(info_va);
             if (curr_mrr > best_mrr) {
                 best_mrr = curr_mrr;
                 if ( !model_path.empty() )
                     model->save(model_path+".model");
+                    cout << "Model saved." << endl;
             }
-            
-            
-            printf("\n");
-            printf("            EV Elapse    %f\n", elapse_ev);
-            printf("======================================\n");
-            pretty_print("TR", info_tr);
-            printf("\n");
-            pretty_print("VA", info_va);
-            printf("\n");
-            printf("VA  MRR_BEST    %.2f\n", 100*best_mrr);
-            printf("VA  HITS_CURR    %.2f\n", 100*curr_hits);
-            printf("VA  MRR_CURR    %.2f\n", 100*curr_mrr);
-            printf("\n");
-            
-            // write to log file
-            ofstream logfile;
-            logfile.open("logfile.txt",std::ios_base::app);
-            logfile << "\n";
-            logfile << "     " << dataset << "   EV Elapse    %f\n"<< elapse_ev;
-            logfile << "======================================\n";
-            pretty_print2("TR", info_tr, logfile);
-            logfile << "\n";
-            pretty_print2("VA", info_va, logfile);
-            logfile << "\n";
-            
-            logfile << "VA  MRR_BEST    " << 100*best_mrr << endl;
-            logfile << "VA  HITS_CURR    " << 100*curr_hits << endl;
-            logfile << "VA  MRR_CURR    " << 100*curr_mrr << endl;
-            
-            logfile << "\n";
-            
-            cout << "mrr diff " << abs(100.0*curr_mrr - 100.0*last_mrr) << endl;
-            cout << "hit s diff " << abs(100.0*info_va.at("hits01_s")-100.0*last_hits) << endl;
-            cout << "hit r diff " << abs(100.0*info_va.at("hits01_r")-100.0*last_hitr) << endl;
-            cout << "hit o diff " << abs(100.0*info_va.at("hits01_o")-100.0*last_hito) << endl;
-
-            last_hits = info_va.at("hits01_s");
-            last_hito = info_va.at("hits01_o");
-            last_hitr = info_va.at("hits01_r");
             last_mrr = curr_mrr;
+            //eval_print("TRAIN EVALUATION",info_tr);
+            eval_print("VALID EVALUATION",info_va);
         }
         
         // shuffles all the numbers corresponding to each example
@@ -774,7 +813,7 @@ int main(int argc, char **argv) {
             }
         }
         elapse_tr = omp_get_wtime() - start_e;
-        printf("Epoch %03d   TR Elapse    %f\n", epoch, elapse_tr);
+        //printf("Epoch %03d   TR Elapse    %f\n", epoch, elapse_tr);
     }
     elapse_tr = omp_get_wtime() - start_t;
     printf("Elapse    %f\n", elapse_tr);
