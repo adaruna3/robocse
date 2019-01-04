@@ -110,21 +110,17 @@ if __name__ == "__main__":
         # sets up for training
         trainer = training_setup(args)
         # sets up for validation
-        #tr_eval,va_eval = validation_setup(args)
         va_eval = validation_setup(args)
         # sets up for visualizing training/validation
-        #tr_viz,va_viz = valid_visualization_setup(tr_eval,va_eval)
-        #va_viz = valid_visualization_setup(va_eval)
+        va_viz = valid_visualization_setup(va_eval)
         # sets up for saving trained models
         best_performance = 0.0
         # training and validation loop
         for epoch in xrange(args.num_epochs):
             # validate and display
             if epoch % args.valid_freq == 0:
-                #tr_performance,tr_loss = tr_eval.evaluate(trainer.model)
                 va_performance,va_loss = va_eval.evaluate(trainer.model)
-                #tr_viz.update(tr_performance,tr_loss,epoch)
-                #va_viz.update(va_performance,va_loss,epoch)
+                va_viz.update(va_performance,va_loss,epoch)
                 # saves trained model by validation performance
                 best_performance = save_model(args,
                                               trainer.model.state_dict(),

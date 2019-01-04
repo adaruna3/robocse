@@ -130,8 +130,8 @@ if __name__ == "__main__":
     assert visdom_server.check_connection(),'Start Visdom!'
     visdom_server.close()
     number_of_relation_types = 3
-    tr_viz = RoboCSETrainViz(visdom_server,'Example',['Loc','Mat','Aff'])
+    tr_viz = RoboCSETrainViz('Example',['Loc','Mat','Aff'])
     for i in xrange(3):
         tr_viz.update(np.random.uniform(size=(3,number_of_relation_types,4)),
-                      np.random.randint(10))
+                      np.random.randint(10),i)
         sleep(3)

@@ -275,26 +275,29 @@ def initialize_optimizer(method,params,model):
 if __name__ == "__main__":
     class example_args:
         def __init__(self):
-            self.ds_name = 'demo'
-            self.exp_name = 'ex'
-            self.batch_size = 2
+            self.ds_name = 'sd_thor'
+            self.exp_name = 'tg_all_0'
+            self.batch_size = 200
             self.num_workers = 1
             self.shuffle = 0
             self.d_size = 100
             self.num_epochs = 20
             self.opt_method = 'sgd'
-            self.opt_params = 1e-1
+            self.opt_params = [1e-1]
             self.valid_freq = 1
             self.train = 1
             self.batch_cutoff = None
+            self.neg_ratio = 2
+            self.neg_method = 'random'
+            self.exclude_train = 1
+            self.cuda = 1
+            self.device = torch.device('cuda')
     temp_args = example_args()
     # check training
     trainer = training_setup(temp_args)
     tl = trainer.train_epoch()
     tp('s','Model trained!: ' + str(tl))
     # check evaluation
-    tr_eval,va_eval = validation_setup(temp_args)
-    tr_performance,tr_loss = tr_eval.evaluate(trainer.model)
+    va_eval = validation_setup(temp_args)
     va_performance,va_loss = va_eval.evaluate(trainer.model)
-    tp('s','Model evaluated! Trian: \n'+str(tr_performance))
     tp('s','Model evaluated! Valid: \n'+str(va_performance))

@@ -773,7 +773,7 @@ int main(int argc, char **argv) {
                     cout << "Model saved." << endl;
             }
             //eval_print("TRAIN EVALUATION",info_tr);
-            eval_print("VALID EVALUATION",info_va);
+            eval_log("VALID EVALUATION",info_va);
         }
         
         // shuffles all the numbers corresponding to each example

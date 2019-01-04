@@ -234,9 +234,28 @@ if __name__ == "__main__":
     from data_utils import TrainDataset,PredictDataset
     from torch.utils.data import DataLoader
 
+    def train_collate(batch):
+        batch = torch.tensor(batch)
+        batch_s = batch[:,:,0].flatten()
+        batch_r = batch[:,:,1].flatten()
+        batch_o = batch[:,:,2].flatten()
+        batch_y = batch[:,:,3].flatten()
+        return batch_s,batch_r,batch_o,batch_y
+
+
+    def valid_collate(batch):
+        batch = torch.tensor(batch)
+        batch_s = batch[:,:,0].flatten()
+        batch_r = batch[:,:,1].flatten()
+        batch_o = batch[:,:,2].flatten()
+        batch_y = batch[:,:,3].flatten()
+        batch_q = batch[:,:,4].flatten()
+        batch_k = batch[:,:,5].flatten()
+        return batch_s,batch_r,batch_o,batch_y,batch_q,batch_k
+
     # creates triples train dataset
-    dataset_name = 'demo'
-    experiment_name = 'ex_0'
+    dataset_name = 'sd_thor'
+    experiment_name = 'tg_all_0'
     dataset = TrainDataset(dataset_name,experiment_name+'_train',1,'random')
 
     # creates analogy model
@@ -250,25 +269,32 @@ if __name__ == "__main__":
     # model = Analogy(len(dataset.e2i),len(dataset.r2i),100,torch.device('cpu'))
 
     # batch loads triples for training
-    batch_size = 2
+    batch_size = 100
     num_threads = 1
-    dataset_loader = DataLoader(dataset,batch_size=batch_size,shuffle=False,
-                                num_workers=num_threads)
+    dataset_loader = DataLoader(dataset,
+                                batch_size=batch_size,
+                                shuffle=False,
+                                num_workers=num_threads,
+                                collate_fn=train_collate)
 
     # tests forward prop with batches
     model.train()
     for idx_b, batch in enumerate(dataset_loader):
-
-        loss = model.forward(batch)
+        bs,br,bo,by = batch
+        loss = model.forward(bs,br,bo,by)
         print "Loss of batch " + str(idx_b) + " is " + \
               str(loss.detach().numpy())
 
     # creates triples valid dataset
     dataset = PredictDataset(dataset_name,experiment_name+'_valid')
-    dataset_loader = DataLoader(dataset,batch_size=batch_size,shuffle=False,
-                                num_workers=num_threads)
+    dataset_loader = DataLoader(dataset,batch_size=1,shuffle=False,
+                                num_workers=num_threads,
+                                collate_fn=valid_collate)
     # tests ranking with batches
     model.eval()
+    count = 1
     for idx_b, batch in enumerate(dataset_loader):
-        ranks = model.get_ranks(batch)
-        print 'Sro,sRo,srO rank for cabinet hasAff close: ' + str(ranks)
+        bs,br,bo,by,bq,bk = batch
+        ranks = model.get_ranks(bs,br,bo,bq)
+        print 'Sro,sRo,srO rank for triple ' + str(count) +': ' + str(ranks)
+        count += 1

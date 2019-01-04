@@ -801,9 +801,12 @@ int main(int argc, char **argv) {
         Evaluator evaluator_va(initial_ne, nr, sros_va_given);
         // evaluator for training data
         Evaluator evaluator_tr(initial_ne, nr, sros_tr_given);
+        // train the embedding without the entity
         train_model(eval_freq,model_path,neg_ratio,num_thread,num_epoch,initial_ne,nr,
                     sros_tr_given,evaluator_tr,evaluator_va,model,sro_bucket);
         cout << "hello" << endl;
+        // reinsert the missing entity, and evaluate immediately on given/missing valid
+        // retrain over all (given/missing) data
     }
 
     return 0;

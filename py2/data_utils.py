@@ -297,8 +297,8 @@ class GT(TriplesCounter):
 
 if __name__ == "__main__":
     # creates train triples dataset
-    dataset_name = 'demo'
-    experiment_name = 'ex_0'
+    dataset_name = 'sd_thor'
+    experiment_name = 'tg_all_0'
     dataset = TrainDataset(dataset_name,experiment_name+'_train',1,'random')
     # loads triples for training
     batch_size = 2
