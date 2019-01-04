@@ -49,32 +49,50 @@ unordered_map<string, int> create_id_mapping(const vector<string>& items) {
     unordered_map<string, int> map;
     for (int i = 0; i < (int) items.size(); i++)
         map[items[i]] = i;
-
     return map;
 }
 
-vector<triplet> create_sros(
-        const string& fname,
-        const unordered_map<string, int>& ent_map,
-        const unordered_map<string, int>& rel_map) {
+void create_sros(int missing_id,
+                 vector<triplet>& given_sros, vector<triplet>& missing_sros,
+                 const string& fname,
+                 const unordered_map<string, int>& ent_map,
+                 const unordered_map<string, int>& rel_map) {
     // creates a dataset of s,r,o triplets
     ifstream ifs(fname, ios::in); // file of triplets
-    string line; // triplet line variable
-    string s, r, o; // subj, obj, rel holders
-    vector<triplet> sros; // list of s,r,o triplets to return
     // make sure dataset file is open
     assert(!ifs.fail());
+
+    string line; // triplet line variable
+    string s, r, o; // subj, obj, rel holders
+    int s_id,o_id; // subj/obj id holders
+    given_sros.clear();
+    missing_sros.clear();
+
     getline(ifs, line); // skip first line
-    while (getline(ifs, line)) { // go through all lines in dataset
+    while (getline(ifs,line)) { // go through all lines in dataset
         stringstream ss(line);
         getline(ss,s,',');
         getline(ss,r,',');
         getline(ss,o,',');
+        // check for subject and object in entity map, o.w. skips triplet
+        try {
+            s_id = ent_map.at(s);
+        } catch (const out_of_range& e) {
+            s_id = missing_id;
+        }
+        try {
+            o_id = ent_map.at(o);
+        } catch (const out_of_range& e) {
+            o_id = missing_id;
+        }
         // add triplet to list while mapping names to unique IDs
-        sros.push_back( make_tuple(ent_map.at(s), rel_map.at(r), ent_map.at(o)) );
+        if ( (s_id == missing_id) || (o_id == missing_id) ){
+            missing_sros.push_back(make_tuple(s_id,rel_map.at(r),o_id));
+        } else {
+            given_sros.push_back(make_tuple(s_id,rel_map.at(r),o_id));
+        }
     }
     ifs.close(); // close file
-    return sros; // return triplets list
 }
 
 vector<vector<double>> uniform_matrix(int m, int n, double l, double h) {
@@ -418,14 +436,13 @@ class Evaluator {
     int ne;
     int nr;
     const vector<triplet>& sros;
-    const SROBucket& sro_bucket;
 
 public:
-    Evaluator(int ne, int nr, const vector<triplet>& sros, const SROBucket& sro_bucket) :
+    Evaluator(int ne, int nr, const vector<triplet>& sros) :
         // sets the number of relations and entities, also gives the set of 
         // s,r,o used to either test, train, or validate and the complete s,r,o
         // bucket        
-        ne(ne), nr(nr), sros(sros), sro_bucket(sro_bucket) {}
+        ne(ne), nr(nr), sros(sros) {}
 
     std::vector<std::vector<std::vector<double>>> evaluate(const Model *model, const SROBucket *bucket, int truncate) {
         // complete training set size
@@ -596,9 +613,9 @@ int ArgPos(char *str, int argc, char **argv) {
 }
 
 void fold_sum(vector<vector<vector<double>>>& metric_total, vector<vector<vector<double>>>& metric) {
-    for(int i = 0; i < 3; i++){
-        for(int j = 0; j < metric_total[0].size(); j++){
-            for(int k = 0; k < 4; k++){
+    for(unsigned i = 0; i < 3; i++){
+        for(unsigned j = 0; j < metric_total[0].size(); j++){
+            for(unsigned k = 0; k < 4; k++){
                 metric_total[i][j][k] += 0.2 * metric[i][j][k];
             }
         }
@@ -607,11 +624,89 @@ void fold_sum(vector<vector<vector<double>>>& metric_total, vector<vector<vector
 
 double condense_mrr(vector<vector<vector<double>>>& metric) {
     double mean_mrr = 0.0;
-    for (int i=0;i<metric[0].size();i++) {
+    for (unsigned i=0;i<metric[0].size();i++) {
         mean_mrr += (metric[0][i][0] + metric[2][i][0])/2.0;
     }
     mean_mrr = mean_mrr / metric[0].size();
     return mean_mrr;
+}
+
+void train_model(int efreq, const string& model_path, const int neg_ratio,
+                 const int num_thread, const int num_epoch, const int ne,
+                 const int nr, const vector<triplet>& sros,
+                 Evaluator& etr, Evaluator& eva,
+                 Model* model, SROBucket* bucket){
+    // thread-specific negative samplers
+    vector<NegativeSampler> neg_samplers;
+    for (int tid = 0; tid < num_thread; tid++) {
+        // creates a bunch of random entity/relation generators
+        neg_samplers.push_back( NegativeSampler(ne, nr, rand() ^ tid) );
+    }
+
+    int N = sros.size(); // N is number of examples in training set
+    vector<int> pi = range(N); // pi is the range of numbers in N
+
+    clock_t start_e;
+    clock_t start_t;
+    double elapse_tr;
+    double elapse_ev;
+    double best_mrr = 0;
+
+    omp_set_num_threads(num_thread); // tells omp lib num of threads to use
+    start_t = omp_get_wtime();
+    for (int epoch = 0; epoch < num_epoch; epoch++) {
+        // goes through the full number of epochs for training
+        if (epoch % efreq == 0) {
+            // evaluation
+            start_e = omp_get_wtime();
+            auto info_tr = etr.evaluate(model, bucket, 2048);
+            auto info_va = eva.evaluate(model, bucket, 2048);
+            elapse_ev = omp_get_wtime() - start_e;
+            printf("Elapse EV    %f\n", elapse_ev);
+            // save the best model to disk
+            double curr_mrr = condense_mrr(info_va);
+            if (curr_mrr > best_mrr) {
+                best_mrr = curr_mrr;
+                if ( !model_path.empty() )
+                    model->save(model_path+".model");
+                    cout << "Model saved." << endl;
+            }
+            //eval_print("TRAIN EVALUATION",info_tr);
+            eval_print("VALID EVALUATION",info_va);
+        }
+
+        // shuffles all the numbers corresponding to each example
+        shuffle(pi.begin(), pi.end(), GLOBAL_GENERATOR);
+
+        #pragma omp parallel for
+        for (int i = 0; i < N; i++) {
+            // goes through each example
+            triplet sro = sros[pi[i]];
+            // extracts the subj, rel, obj
+            int s = get<0>(sro);
+            int r = get<1>(sro);
+            int o = get<2>(sro);
+
+            int tid = omp_get_thread_num();
+
+            // trains on 1 positive example
+            model->train(s, r, o, true);
+
+            // trains on neg_ratio*3 negative examples
+            for (int j = 0; j < neg_ratio; j++) {
+                // creates 'negative' ss, rr, oo for sample (XXX not garunteed)
+                int oo = neg_samplers[tid].random_entity();
+                int ss = neg_samplers[tid].random_entity();
+                int rr = neg_samplers[tid].random_relation();
+
+                model->train(s, r, oo, false);
+                model->train(ss, r, o, false);
+                model->train(s, rr, o, false);
+            }
+        }
+    }
+    elapse_tr = omp_get_wtime() - start_t;
+    printf("Elapse TR    %f\n", elapse_tr);
 }
 
 int main(int argc, char **argv) {
@@ -627,7 +722,6 @@ int main(int argc, char **argv) {
     int     num_thread  =  1; // number of threads
     int     eval_freq   =  10; // how often to evaluate while training
     string  model_path; // path to output- (train) or input- (test) model
-    bool    prediction  = false; // whether testing or training
     int     num_scalar  = embed_dim / 2.0;
     int     train_size  = 0;
     // parses all the ANALOGY arguments
@@ -641,7 +735,6 @@ int main(int argc, char **argv) {
     if ((i = ArgPos((char *)"-eval_freq",  argc, argv)) > 0)  eval_freq   =  atoi(argv[i+1]);
     if ((i = ArgPos((char *)"-dataset",    argc, argv)) > 0)  dataset     =  string(argv[i+1]);
     if ((i = ArgPos((char *)"-experiment", argc, argv)) > 0)  experiment  =  string(argv[i+1]);
-    if ((i = ArgPos((char *)"-prediction", argc, argv)) > 0)  prediction  =  true;
     if ((i = ArgPos((char *)"-num_scalar", argc, argv)) > 0)  num_scalar  =  atoi(argv[i+1]);
     if ((i = ArgPos((char *)"-train_size", argc, argv)) > 0)  train_size  =  atoi(argv[i+1]);
     num_scalar  = embed_dim / 2.0;
@@ -667,156 +760,51 @@ int main(int argc, char **argv) {
     unordered_map<string, int> rel_map = create_id_mapping(rels);
     int ne = ent_map.size();
     int nr = rel_map.size();
+    // initializes the ANALOGY model pointer
+    Model *model = NULL;
 
-    // loads the train, test, and validation triplets from each dataset
-    vector<triplet> sros_tr;
-    vector<triplet> sros_va;
-    vector<triplet> sros_te;
+    vector<triplet> sros_tr_given;
+    vector<triplet> sros_va_given;
+    vector<triplet> sros_te_given;
+    vector<triplet> sros_tr_missing;
+    vector<triplet> sros_va_missing;
+    vector<triplet> sros_te_missing;
     vector<triplet> sros_al;
 
-    // initializes the ANALOGY model for use
-    Model *model = NULL;
-    model = new Analogy(ne,nr,embed_dim,num_scalar,eta,gamma);
-    assert(model != NULL);
-    
-    // checks if we are in the testing phase of program
-    if (prediction) {
-        vector<vector<vector<double>>> info_test_avg;
-        info_test_avg.resize(3);
-        for(int i = 0; i < 3; i++){
-            info_test_avg[i].resize(nr);
-            for(int j = 0; j < nr; j++){
-                info_test_avg[i][j].resize(4);
-                for(int k = 0; k < 4; k++){
-                    info_test_avg[i][j][k] = 0.0;
-                }
-            }
-        }
-
-        string fold_name;
-        string model_fold_path;
-        for (int i=0;i<5;i++) {
-            fold_name = ddir+dataset+"_"+experiment+"_"+to_string(i);
-            model_fold_path = model_path+"_"+to_string(i)+".model";
-            sros_tr = create_sros(fold_name+"_train.csv",ent_map,rel_map);
-            sros_va = create_sros(fold_name+"_valid.csv",ent_map,rel_map);
-            sros_te = create_sros(fold_name+"_test.csv",ent_map,rel_map);
-            sros_al.clear();
-            sros_al.insert(sros_al.end(), sros_tr.begin(), sros_tr.end());
-            sros_al.insert(sros_al.end(), sros_va.begin(), sros_va.end());
-            sros_al.insert(sros_al.end(), sros_te.begin(), sros_te.end());
-
-            // creates a 'bucket' object of all s,r,o triplets, used later
-            SROBucket sro_bucket_al(sros_al);
-            SROBucket *sro_bucket = &sro_bucket_al;
-
-            Evaluator evaluator_te(ne, nr, sros_te, sro_bucket_al);
-            model->load(model_fold_path);
-            vector<vector<vector<double>>> info_test = evaluator_te.evaluate(model,sro_bucket,-1);
-            //eval_print("FOLD EVALUATION",info_test);
-            fold_sum(info_test_avg, info_test);
-        }
-        eval_print("VALID EVALUATION",info_test_avg);
-        return 0;
+    for (int entity_id=0; entity_id<ne; entity_id++) {
+        // selects the entity that will be missing
+        string missing_entity = ents[entity_id];
+        int missing_entity_id = ent_map.at(missing_entity);
+        // removes from ents
+        vector<string> initial_ents(ents);
+        initial_ents.erase(initial_ents.begin()+missing_entity_id);
+        // makes new entity map to remove missing
+        unordered_map<string,int> initial_ent_map = create_id_mapping(initial_ents);
+        int initial_ne = initial_ent_map.size();
+        // clears the previous model
+        model = new Analogy(initial_ne,nr,embed_dim,num_scalar,eta,gamma);
+        assert(model != NULL);
+        // create triplets for given and missing train, valid, and test sets
+        string triples_fp_root = ddir+dataset+"_"+experiment;
+        create_sros(missing_entity_id,sros_tr_given,sros_tr_missing,triples_fp_root+"_train.csv",initial_ent_map,rel_map);
+        create_sros(missing_entity_id,sros_va_given,sros_va_missing,triples_fp_root+"_valid.csv",initial_ent_map,rel_map);
+        create_sros(missing_entity_id,sros_te_given,sros_te_missing,triples_fp_root+"_test.csv",initial_ent_map,rel_map);
+        // initial training over only GIVEN data, makes ground truth
+        sros_al.clear();
+        sros_al.insert(sros_al.end(), sros_tr_given.begin(), sros_tr_given.end());
+        sros_al.insert(sros_al.end(), sros_va_given.begin(), sros_va_given.end());
+        sros_al.insert(sros_al.end(), sros_te_given.begin(), sros_te_given.end());
+        // creates a 'bucket' object of all s,r,o triplets, used later
+        SROBucket sro_bucket_al(sros_al);
+        SROBucket* sro_bucket = &sro_bucket_al;
+        // evaluator for validation data
+        Evaluator evaluator_va(initial_ne, nr, sros_va_given);
+        // evaluator for training data
+        Evaluator evaluator_tr(initial_ne, nr, sros_tr_given);
+        train_model(eval_freq,model_path,neg_ratio,num_thread,num_epoch,initial_ne,nr,
+                    sros_tr_given,evaluator_tr,evaluator_va,model,sro_bucket);
+        cout << "hello" << endl;
     }
-
-    // loads the train, test, and validation triplets from each dataset
-    sros_tr = create_sros(ddir+dataset+"_"+experiment+"_train.csv",ent_map,rel_map);
-    sros_va = create_sros(ddir+dataset+"_"+experiment+"_valid.csv",ent_map,rel_map);
-    sros_te = create_sros(ddir+dataset+"_"+experiment+"_test.csv",ent_map,rel_map);
-    // store all the triplets in sros_al
-    sros_al.insert(sros_al.end(), sros_tr.begin(), sros_tr.end());
-    sros_al.insert(sros_al.end(), sros_va.begin(), sros_va.end());
-    sros_al.insert(sros_al.end(), sros_te.begin(), sros_te.end());
-    // creates a 'bucket' object of all s,r,o triplets, used later
-    SROBucket sro_bucket_al(sros_al);
-    SROBucket *sro_bucket = &sro_bucket_al;
-    
-    // evaluator for validation data
-    Evaluator evaluator_va(ne, nr, sros_va, sro_bucket_al);
-    // evaluator for training data
-    Evaluator evaluator_tr(ne, nr, sros_tr, sro_bucket_al);
-
-    // thread-specific negative samplers
-    vector<NegativeSampler> neg_samplers;
-    for (int tid = 0; tid < num_thread; tid++) {
-        // creates a bunch of random entity/relation generators
-        neg_samplers.push_back( NegativeSampler(ne, nr, rand() ^ tid) );
-    }
-
-    int N = sros_tr.size(); // N is number of examples in training set
-    vector<int> pi = range(N); // pi is the range of numbers in N
-
-    clock_t start_e;
-    clock_t start_t;
-    double elapse_tr;
-    double elapse_ev;
-    double best_mrr = 0;
-    double last_mrr;
-    
-    omp_set_num_threads(num_thread); // tells omp lib num of threads to use
-
-    start_t = omp_get_wtime();
-    for (int epoch = 0; epoch < num_epoch; epoch++) {
-        // goes through the full number of epochs for training
-        if (epoch % eval_freq == 0) {
-            // evaluation
-            start_e = omp_get_wtime();
-            auto info_tr = evaluator_tr.evaluate(model, sro_bucket, 2048);
-            auto info_va = evaluator_va.evaluate(model, sro_bucket, 2048);
-            elapse_ev = omp_get_wtime() - start_e;
-
-            // save the best model to disk
-            double curr_mrr = condense_mrr(info_va);
-            if (curr_mrr > best_mrr) {
-                best_mrr = curr_mrr;
-                if ( !model_path.empty() )
-                    model->save(model_path+".model");
-                    cout << "Model saved." << endl;
-            }
-            last_mrr = curr_mrr;
-            //eval_print("TRAIN EVALUATION",info_tr);
-            eval_print("VALID EVALUATION",info_va);
-        }
-        
-        // shuffles all the numbers corresponding to each example
-        shuffle(pi.begin(), pi.end(), GLOBAL_GENERATOR);
-
-        start_e = omp_get_wtime();
-        #pragma omp parallel for
-        for (int i = 0; i < N; i++) {
-            // goes through each example
-            triplet sro = sros_tr[pi[i]];
-            // extracts the subj, rel, obj
-            int s = get<0>(sro);
-            int r = get<1>(sro);
-            int o = get<2>(sro);
-
-            int tid = omp_get_thread_num();
-
-            // trains on 1 positive example
-            model->train(s, r, o, true);
-
-            // trains on neg_ratio*3 negative examples
-            for (int j = 0; j < neg_ratio; j++) {
-                // creates 'negative' ss, rr, oo for sample (XXX not garunteed)
-                int oo = neg_samplers[tid].random_entity();
-                int ss = neg_samplers[tid].random_entity();
-                int rr = neg_samplers[tid].random_relation();
-
-                // XXX: it is empirically beneficial to carry out updates even
-                // if oo == o || ss == s.
-                // This might be related to regularization.
-                model->train(s, r, oo, false);
-                model->train(ss, r, o, false);
-                model->train(s, rr, o, false);   // this improves MR slightly
-            }
-        }
-        elapse_tr = omp_get_wtime() - start_e;
-        //printf("Epoch %03d   TR Elapse    %f\n", epoch, elapse_tr);
-    }
-    elapse_tr = omp_get_wtime() - start_t;
-    printf("Elapse    %f\n", elapse_tr);
 
     return 0;
 }

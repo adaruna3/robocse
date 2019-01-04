@@ -418,14 +418,13 @@ class Evaluator {
     int ne;
     int nr;
     const vector<triplet>& sros;
-    const SROBucket& sro_bucket;
 
 public:
-    Evaluator(int ne, int nr, const vector<triplet>& sros, const SROBucket& sro_bucket) :
+    Evaluator(int ne, int nr, const vector<triplet>& sros) :
         // sets the number of relations and entities, also gives the set of 
         // s,r,o used to either test, train, or validate and the complete s,r,o
         // bucket        
-        ne(ne), nr(nr), sros(sros), sro_bucket(sro_bucket) {}
+        ne(ne), nr(nr), sros(sros) {}
 
     std::vector<std::vector<std::vector<double>>> evaluate(const Model *model, const SROBucket *bucket, int truncate) {
         // complete training set size
@@ -596,9 +595,9 @@ int ArgPos(char *str, int argc, char **argv) {
 }
 
 void fold_sum(vector<vector<vector<double>>>& metric_total, vector<vector<vector<double>>>& metric) {
-    for(int i = 0; i < 3; i++){
-        for(int j = 0; j < metric_total[0].size(); j++){
-            for(int k = 0; k < 4; k++){
+    for(unsigned i = 0; i < 3; i++){
+        for(unsigned j = 0; j < metric_total[0].size(); j++){
+            for(unsigned k = 0; k < 4; k++){
                 metric_total[i][j][k] += 0.2 * metric[i][j][k];
             }
         }
@@ -607,7 +606,7 @@ void fold_sum(vector<vector<vector<double>>>& metric_total, vector<vector<vector
 
 double condense_mrr(vector<vector<vector<double>>>& metric) {
     double mean_mrr = 0.0;
-    for (int i=0;i<metric[0].size();i++) {
+    for (unsigned i=0;i<metric[0].size();i++) {
         mean_mrr += (metric[0][i][0] + metric[2][i][0])/2.0;
     }
     mean_mrr = mean_mrr / metric[0].size();
@@ -710,7 +709,7 @@ int main(int argc, char **argv) {
             SROBucket sro_bucket_al(sros_al);
             SROBucket *sro_bucket = &sro_bucket_al;
 
-            Evaluator evaluator_te(ne, nr, sros_te, sro_bucket_al);
+            Evaluator evaluator_te(ne, nr, sros_te);
             model->load(model_fold_path);
             vector<vector<vector<double>>> info_test = evaluator_te.evaluate(model,sro_bucket,-1);
             //eval_print("FOLD EVALUATION",info_test);
@@ -733,9 +732,9 @@ int main(int argc, char **argv) {
     SROBucket *sro_bucket = &sro_bucket_al;
     
     // evaluator for validation data
-    Evaluator evaluator_va(ne, nr, sros_va, sro_bucket_al);
+    Evaluator evaluator_va(ne, nr, sros_va);
     // evaluator for training data
-    Evaluator evaluator_tr(ne, nr, sros_tr, sro_bucket_al);
+    Evaluator evaluator_tr(ne, nr, sros_tr);
 
     // thread-specific negative samplers
     vector<NegativeSampler> neg_samplers;
@@ -752,7 +751,6 @@ int main(int argc, char **argv) {
     double elapse_tr;
     double elapse_ev;
     double best_mrr = 0;
-    double last_mrr;
     
     omp_set_num_threads(num_thread); // tells omp lib num of threads to use
 
@@ -765,7 +763,7 @@ int main(int argc, char **argv) {
             auto info_tr = evaluator_tr.evaluate(model, sro_bucket, 2048);
             auto info_va = evaluator_va.evaluate(model, sro_bucket, 2048);
             elapse_ev = omp_get_wtime() - start_e;
-
+            printf("Elapse   EV %f\n", elapse_ev);
             // save the best model to disk
             double curr_mrr = condense_mrr(info_va);
             if (curr_mrr > best_mrr) {
@@ -774,7 +772,6 @@ int main(int argc, char **argv) {
                     model->save(model_path+".model");
                     cout << "Model saved." << endl;
             }
-            last_mrr = curr_mrr;
             //eval_print("TRAIN EVALUATION",info_tr);
             eval_print("VALID EVALUATION",info_va);
         }
@@ -812,11 +809,10 @@ int main(int argc, char **argv) {
                 model->train(s, rr, o, false);   // this improves MR slightly
             }
         }
-        elapse_tr = omp_get_wtime() - start_e;
         //printf("Epoch %03d   TR Elapse    %f\n", epoch, elapse_tr);
     }
     elapse_tr = omp_get_wtime() - start_t;
-    printf("Elapse    %f\n", elapse_tr);
+    printf("Elapse   TR %f\n", elapse_tr);
 
     return 0;
 }
