@@ -1,2 +1,4 @@
-# RoboCSE
-Home of the Robot Common Sense Embedding
+# Py-RoboCSE
+## Overview
+## Required Files
+## Running Py-RoboCSE
