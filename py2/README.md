@@ -17,7 +17,7 @@ An example `datasets` directory that can be copy/pasted in in the [root](https:/
 2. You can train a single fold from the examples `datasets` directory via following command from the `tr_thor_default.sh` script in the `scripts` folder: `python run_robocse.py sd_thor tg_all_0 -m adagrad -p 1e-2 0 1e-4 -bc 7 -bs 200 -d 200`.
 3. While training, evaluations of the valid triples will be visualized in visdom plots. You can view these plots in a web-browser at `http://localhost:8097/`.
 
-## Testing C++ RoboCSE (5-fold-cross-validation)
+## Testing Py-RoboCSE (5-fold-cross-validation)
 1. First train a model for each fold of the model by running `./scripts/tr_thor_default.sh`. As models are trained/saved they will appear in the `trained_models` folder.
 2. Once a model for each fold has been trained, you can test across all folds via `python run_robocse.py sd_thor tg_all -d 100 -t 0`.
 3. Test evaluation will print to terminal.
