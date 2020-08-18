@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>HCKG</title>
+    <link rel="icon" href="img/logo_r.png">
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <!-- animate CSS -->
+    <link rel="stylesheet" href="css/animate.css">
+    <!-- owl carousel CSS -->
+    <link rel="stylesheet" href="css/owl.carousel.min.css">
+    <!-- themify CSS -->
+    <link rel="stylesheet" href="css/themify-icons.css">
+    <!-- flaticon CSS -->
+    <link rel="stylesheet" href="css/flaticon.css">
+    <!-- magnific popup CSS -->
+    <link rel="stylesheet" href="css/magnific-popup.css">
+    <!-- nice select CSS -->
+    <link rel="stylesheet" href="css/nice-select.css">
+    <!-- swiper CSS -->
+    <link rel="stylesheet" href="css/slick.css">
+    <!-- style CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <!-- visualization CSS -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+</head>
+
+<body>
+    <!-- include js for visualizations -->
+    <script src="js/jquery-1.12.1.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+    <script type="text/javascript" src="JSON_files/transe_data.js"></script>
+    <script type="text/javascript" src="JSON_files/transe_glossary.js"></script>
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+
+    <!--::header part start::-->
+    <header class="main_menu home_menu">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-12">
+                    <nav class="navbar navbar-expand-lg navbar-light">
+                        <button class="navbar-toggler" type="button" data-toggle="collapse"
+                            data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent"
+                            aria-expanded="false" aria-label="Toggle navigation">
+                            <span class="navbar-toggler-icon"></span>
+                        </button>
+
+                        <a class="nav-item navbar-brand" href="../index.html">Robot Common-</br>Sense Embedding</a>
+
+                        <div class="collapse navbar-collapse main-menu-item justify-content-center"
+                            id="navbarSupportedContent">
+
+                            <a class="nav-item btn_2" href="https://github.com/adaruna3/robocse">Download</a>
+
+                            <ul class="navbar-nav align-items-center ml-auto">
+                                <li class="nav-item">
+                                    <a class="nav-link" href="explore.html">Explore</a>
+                                </li>
+
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="blog.html" id="navbarDropdown"
+                                        role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        AI2Thor
+                                    </a>
+                                    <div class="dropdown-menu" aria-labelledby="navbarDropdown">
+                                        <a class="dropdown-item" href="groundtruth.html">Ground Truth</a>
+                                        <a class="dropdown-item" href="analogy.html">Analogy Embedding</a>
+                                        <a class="dropdown-item" href="transe.html">TransE Embedding</a>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </header>
+    <!-- Header part end-->
+
+    <!-- banner part start-->
+    <section class="banner_part">
+        <div class="container">
+            <!-- VISUALIZATION -->
+            <div class="row align-content-center">
+                <!-- GEMSTONE -->
+                <div class="col-lg-2 align-content-start gemstone">
+                    <h2>Member (Node) Search</h2>
+                    <div class="gemstone_bar">
+                        <input id="search" type="text" placeholder="node.n">
+                        <button id="search_button" type="button" onclick="searchNode()">Search Node</button>
+                        <script>
+                            // Get the input field
+                            var input = document.getElementById("search");
+
+                            // Execute a function when the user releases a key on the keyboard
+                            input.addEventListener("keyup", function(event) {
+                              // Number 13 is the "Enter" key on the keyboard
+                              if (event.keyCode === 13) {
+                                // Cancel the default action, if needed
+                                event.preventDefault();
+                                // Trigger the button element with a click
+                                document.getElementById("search_button").click();
+                              }
+                            });
+                        </script>
+                    </div>
+                    <div id="result" class="gemstone_result">
+                        <script>
+                            var words = JSON.parse(gemstone)
+
+                            function myFunction(entryVal) {
+                                var entryVal = document.getElementById("search");
+                                var entryId = entryVal.value;
+                                if (entryId in words) {
+                                    var gem = words[entryId];
+                                    message = "<b><u>" + entryId + ":</u></b><br><br>";
+                                    if (gem == "This entity only exists as a tail") {
+                                        message += "<i>" + words[entryId] + "</i>";
+                                    } else {
+                                        var relation;
+                                        for (relation in gem) {
+                                            message += "<u>" + relation + "</u><br>";
+                                            i = 1;
+                                            var tail;
+                                            for (tail in gem[relation]) {
+                                                addition = gem[relation][tail][0]
+                                                coloring = gem[relation][tail][1]
+                                                message += '<p style="color:' + coloring+ '">' + "&#8195;" + i + ". " + tail + '<br></p>';
+                                                i++;
+                                            }
+                                            message += "<br>";
+                                        }
+                                    }
+                                    document.getElementById("result").innerHTML = message;
+                                } else {
+                                    document.getElementById("result").innerHTML = "Not found";
+                                }
+                                entryVal.focus();
+                            }
+                        </script>
+                    </div>
+                </div>
+                <!-- END GEMSTONE -->
+
+                <div class="col-lg-10">
+                    <!-- BEGIN LEGEND -->
+                    <div class="col-lg-2 legend">
+                        <h2>Summary</h2>
+                        <div id="summary"></div>
+                        <script>
+                            var allData = JSON.parse(data);
+                            var stats = allData.correctness;
+                            var writing = "";
+                            var stat;
+                            for (stat in stats) {
+                                writing += stat + ": " + stats[stat] + "<br>"
+                            }
+                            document.getElementById("summary").innerHTML = writing;
+                        </script>
+                        <h2>Legend</h2>
+                        <h3>Nodes</h3>
+                        <div id="legcontainer1" class="nodeLegend"></div>
+                        <h3>Links</h3>
+                        <div id="legcontainer2" class="linkLegend">
+                            <div class="box" style="background: lightgray"></div>
+                            <span style="color: lightgray">Correctly Recalled</span><br>
+
+                            <div class="box" style="background: ForestGreen"></div>
+                            <span style="color: ForestGreen">Correctly Inferred</span><br>
+
+                            <div class="box" style="background: FireBrick"></div>
+                            <span style="color: FireBrick">Incorrectly Inferred</span><br>
+                        </div>
+                    </div>
+                    <!-- END LEGEND -->
+
+                    <!-- ANTHILL -->
+                    <div class="col-lg-10 visual">
+                        <h2>TransE Knowledge Graph</h2>
+                        <div id="vizcontainer" class="graphFormat">
+                            <script>
+                            var color = d3.scale.category20();
+
+                            var width = +d3.select('.graphFormat').style('width').slice(0, -2);
+                            var height = +d3.select('.graphFormat').style('height').slice(0, -2);
+
+                            var nodeLegendWidth = +d3.select('.nodeLegend').style('width').slice(0, -2);
+                            var nodeLegendHeight = +d3.select('.nodeLegend').style('height').slice(0, -2);
+
+                            var linkLegendWidth = +d3.select('.linkLegend').style('width').slice(0, -2);
+                            var linkLegendHeight = +d3.select('.linkLegend').style('height').slice(0, -2);
+
+                            function zooming() {
+                                svg.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+                            }
+
+                            var zoom = d3.behavior.zoom()
+                                .scale([0.2])
+                                .scaleExtent([.1, 20])
+                                .on("zoom", zooming);
+
+                            var svg = d3.select("#vizcontainer").append("svg")
+                                .attr("width", width + "px")
+                                .attr("height", height + "px")
+                                .call(responsivefy)
+                                .call(zoom)
+                                .append("g")
+                                .attr("transform","scale(0.2,0.2)");
+
+                            var graph = JSON.parse(data);
+
+                            var force = d3.layout.force()
+                                .friction(.5)
+                                .charge(function (d) {return (-287.5 * graph.links.length / graph.nodes.length * d.weightage)})
+                                .gravity(.25)
+                                .linkStrength(.75)
+                                .size([width, height])
+                                .nodes(graph.nodes)
+                                .links(graph.links)
+                                .start();
+
+                            /* draws the links */
+
+                            var link = svg.selectAll(".link")
+                                .data(graph.links)
+                                .enter().append("line")
+                                .attr("class", "link")
+                                .style("stroke-opacity ", .8)
+                                .style("stroke-width", 2)
+                                .style("stroke", function (d) {
+                                    color(d.group);
+                                    return d.correct;
+                                })
+                                .style("marker-end", "url(#suit)");
+
+                            /* draws the nodes */
+
+                            var node = svg.selectAll(".node")
+                                .data(graph.nodes)
+                                .enter().append("g")
+                                .attr("class", "node")
+                                .on('click', connectedNodes)
+                                .attr("weight", function (d) { return d.weightage });
+
+                            /* needed to make node colors same across graphs */
+                            color("placeholder1");
+                            color("placeholder2")
+
+                            node.append("circle")
+                                .attr("cx", width/2)
+                                .attr("cy", height/2)
+                                .attr("r", function (d) { return d.size })
+                                .style("fill", function (d) {
+                                    return color(d.group);
+                                })
+
+                            node.append("text")
+                                .attr("dx", 0)
+                                .attr("dy", ".35em")
+                                .style("text-anchor", "middle")
+                                .text(function (d) { return d.label });
+
+                            /* applies the forces to graph */
+
+                            force.on("tick", function () {
+                                link.each(function (d) {
+                                    diffX = d.target.x - d.source.x;
+                                    diffY = d.target.y - d.source.y;
+                                    pathLength = Math.sqrt((diffX * diffX) + (diffY * diffY));
+                                    offsetX = (diffX * d.target.size) / pathLength;
+                                    offsetY = (diffY * d.target.size) / pathLength;
+                                    d.targetX = d.target.x - offsetX;
+                                    d.targetY = d.target.y - offsetY;
+                                });
+
+                                link.attr("x1", function (d) { return d.source.x; })
+                                    .attr("y1", function (d) { return d.source.y; })
+                                    .attr("x2", function (d) { return d.targetX; })
+                                    .attr("y2", function (d) { return d.targetY; });
+
+                                d3.selectAll("circle")
+                                    .attr("cx", function (d) {
+                                        return d.x;
+                                    })
+                                    .attr("cy", function (d) {
+                                        return d.y;
+                                    });
+
+                                d3.selectAll("text")
+                                    .attr("x", function (d) {
+                                        return d.x;
+                                    })
+                                    .attr("y", function (d) {
+                                        return d.y;
+                                    });
+                                node.each(collide(0.5));
+                            });
+                            svg.append("defs").selectAll("marker")
+                                .data(["suit", "licensing", "resolved"])
+                                .enter().append("marker")
+                                .attr("id", function (d) { return d; })
+                                .attr("viewBox", "0 -5 10 10")
+                                .attr("refX", 10)
+                                .attr("refY", 0)
+                                .attr("markerWidth", 6)
+                                .attr("markerHeight", 5)
+                                .attr("orient", "auto")
+                                .append("path")
+                                .attr("d", "M0,-5L10,0L0,5 L10,0 L0, -5")
+                                .style("stroke", "#000")
+                                .style("opacity", .8);
+
+                            /* creates the node legend */
+
+                            var nodeLegend = d3.select("#legcontainer1").append("svg")
+                                .attr("width", nodeLegendWidth)
+                                .attr("height", nodeLegendHeight)
+                                .call(responsivefy)
+                                .append("g");
+
+                            var legend1 = nodeLegend.selectAll(".legend")
+                                .data(function (d){
+                                    nodeslegend = [];
+                                    colorarray = color.domain();
+                                    for (thing in color.domain()) {
+                                        if (colorarray[thing].includes("Node")) {
+                                            nodeslegend.push(colorarray[thing]);
+                                        }
+                                    }
+                                    return nodeslegend;
+                                })
+                                .enter().append("g")
+                                .attr("class", "legend")
+                                .attr("y", 10)
+                                .attr("transform", function(d, i) {
+                                    shift = 10 + i * 20;
+                                    return "translate(10," + shift + ")"; });
+
+                            legend1.append("circle")
+                                .attr("r", 5)
+                                .style("fill", color);
+
+                            legend1.append("text")
+                                .attr("dx", ".5em")
+                                .attr("dy", ".35em")
+                                .style("text-anchor", "start")
+                                .style("fill", color)
+                                .text(function(d) {
+                                    both = d.split("|");
+                                    label = both[0];
+                                    return label;
+                                });
+
+                            /* creates the link legend */
+
+                            var linkLegend = d3.select("#legcontainer2").append("svg")
+                                .attr("width", linkLegendWidth)
+                                .attr("height", linkLegendHeight)
+                                .call(responsivefy)
+                                .append("g");
+
+                            var toggle = 0;
+
+                            //Create an array logging what is connected to what
+                            var linkedByIndex = {};
+                            for (i = 0; i < graph.nodes.length; i++) {
+                                linkedByIndex[i + "," + i] = 1;
+                            };
+                            graph.links.forEach(function (d) {
+                                linkedByIndex[d.source.index + "," + d.target.index] = 1;
+                            });
+
+                            //This function looks up whether a pair are neighbours
+                            function neighboring(a, b) {
+                                return linkedByIndex[a.index + "," + b.index];
+                            }
+
+                            function connectedNodes() {
+
+                                if (toggle == 0 && d3.event.ctrlKey) {
+                                    //Reduce the opacity of all but the neighbouring nodes
+                                    d = d3.select(this).node().__data__;
+                                    node.style("opacity", function (o) {
+                                        return neighboring(d, o) | neighboring(o, d) ? 1 : 0.05;
+                                    });
+
+                                    link.style("opacity", function (o) {
+                                        return d.index == o.source.index | d.index == o.target.index ? 1 : 0.05;
+                                    });
+
+                                    //Reduce the op
+
+                                    toggle = 1;
+                                } else {
+                                    //Put them back to opacity=1
+                                    node.style("opacity", 1);
+                                    link.style("opacity", .8);
+                                    toggle = 0;
+                                }
+
+                            }
+
+                            var padding = 0, // separation between circles
+                                radius = 35;
+
+                            function collide(alpha) {
+                                var quadtree = d3.geom.quadtree(graph.nodes);
+                                return function (d) {
+                                    var rb = 2 * radius + padding,
+                                        nx1 = d.x - rb,
+                                        nx2 = d.x + rb,
+                                        ny1 = d.y - rb,
+                                        ny2 = d.y + rb;
+                                    quadtree.visit(function (quad, x1, y1, x2, y2) {
+                                        if (quad.point && (quad.point !== d)) {
+                                            var x = d.x - quad.point.x,
+                                                y = d.y - quad.point.y,
+                                                l = Math.sqrt(x * x + y * y);
+                                            if (l < rb) {
+                                                l = (l - rb) / l * alpha;
+                                                d.x -= x *= l;
+                                                d.y -= y *= l;
+                                                quad.point.x += x;
+                                                quad.point.y += y;
+                                            }
+                                        }
+                                        return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+
+                                    });
+                                };
+                            }
+
+                            /* code for autocomplete searches */
+
+                            var optArray = [];
+                            for (var i = 0; i < graph.nodes.length - 1; i++) {
+                                optArray.push(graph.nodes[i].id);
+                            }
+                            optArray = optArray.sort();
+                            $(function () {
+                                $("#search").autocomplete({
+                                    source: optArray
+                                });
+                            });
+
+                            /* search node functionality */
+                            function searchNode() {
+                                // updates the glossary
+                                myFunction();
+                                // updates the graph focus
+                                var selectedVal = document.getElementById('search').value;
+                                var node = svg.selectAll(".node");
+                                var notSelected = node.filter(function (d, i) {
+                                    if (d.id == selectedVal) {
+                                        //Reduce the opacity of all but the neighbouring nodes
+                                        node.style("opacity", function (o) {
+                                            return neighboring(d, o) | neighboring(o, d) ? 1 : 0.05;
+                                        });
+                                        link.style("opacity", function (o) {
+                                            return d.index == o.source.index | d.index == o.target.index ? 1 : 0.05;
+                                        });
+                                        var dcx = (width/2-d.x*zoom.scale());
+                                        var dcy = (height/2-d.y*zoom.scale());
+                                        zoom.translate([dcx,dcy]);
+                                        svg.attr("transform", "translate("+ dcx + "," + dcy  + ")scale(" + zoom.scale() + ")");
+                                    }
+                                });
+                            }
+
+                            function responsivefy(svg) {
+                                // get container + svg aspect ratio
+                                var container = d3.select(svg.node().parentNode),
+                                    width = parseInt(svg.style("width")),
+                                    height = parseInt(svg.style("height")),
+                                    aspect = width / height;
+
+                                // add viewBox and preserveAspectRatio properties,
+                                // and call resize so that svg resizes on inital page load
+                                svg.attr("viewBox", "0 0 " + width + " " + height)
+                                    .attr("perserveAspectRatio", "xMinYMid")
+                                    .call(resize);
+
+                                // to register multiple listeners for same event type,
+                                // you need to add namespace, i.e., 'click.foo'
+                                // necessary if you call invoke this function for multiple svgs
+                                // api docs: https://github.com/mbostock/d3/wiki/Selections#on
+                                d3.select(window).on("resize." + container.attr("id"), resize);
+
+                                // get width of container and resize svg to fit it
+                                function resize() {
+                                    var targetWidth = parseInt(container.style("width"));
+                                    svg.attr("width", targetWidth);
+                                    svg.attr("height", Math.round(targetWidth / aspect));
+                                }
+                            }
+
+                            /* center the graph after loading */
+                            node.filter(function (d, i) {
+                                if (d.id == "bathroom.r") {
+                                    var dcx = (width/2-d.x*zoom.scale());
+                                    var dcy = (height/2-d.y*zoom.scale());
+                                    zoom.translate([dcx,dcy]);
+                                    svg.attr("transform", "translate("+ dcx + "," + dcy  + ")scale(" + zoom.scale() + ")");
+                                }
+                            });
+
+                            </script>
+                        </div>
+                    </div>
+                    <!-- END ANTHILL -->
+                </div>
+            </div>
+            <!-- END VISUALIZATION -->
+
+            <!-- EXPLANATION -->
+            <div class="row">
+                <div class="col-lg-2 col-md-2 explanation">
+                    <h2>What am I viewing?</h2>
+                </div>
+                <div class="col align-self-center justify-self-start explanation">
+                    <div>
+                        Above is the knowledge graph inferred (all edges within Hits@5 inferred 'True') by the TransE multi-relational embedding after training on 80% of the AI2Thor dataset (i.e. 'Ground Truth').
+                        Nodes of the graph can be highlighted by typing the node's full name (i.e. 'node.n') into the member search.
+                    </div>
+                </div>
+            </div>
+            <!-- END EXPLANATION -->
+        </div>
+    </section>
+
+    <!-- footer part start-->
+    <footer class="footer-area">
+        <div class="footer section_padding">
+            <div class="container">
+                <div class="row justify-content-between">
+                    <div class="col single-footer-widget">
+                        <a href="http://rail.gatech.edu/" class="footer_logo"> <img src="img/logo_sm.png" alt="#"> </a>
+                        <div class="social_logo">
+                            <a href="https://github.com/GT-RAIL"><i class="ti-github"></i></a>
+                            <a href="https://www.youtube.com/channel/UCxnm8iu1TS75YNXcAiI-nEw/videos"><i class="ti-youtube"></i> </a>
+                        </div>
+                    </div>
+                    <div class="col single-footer-widget">
+                        <p>If you use this data in research, please cite <a href="https://ieeexplore.ieee.org/abstract/document/8794070">this ICRA 2019 paper</a>.</p>
+                    </div>
+                </div>
+                <div class="row align-items-center">
+                    <p class="footer-text m-0 col-lg-8 col-md-12"><!-- Link back to Colorlib can't be removed. Template is licensed under CC BY 3.0. -->
+Copyright &copy;<script>document.write(new Date().getFullYear());</script> All rights reserved | This template is made with <i class="ti-heart" aria-hidden="true"></i> by <a href="https://colorlib.com" target="_blank">Colorlib</a>
+<!-- Link back to Colorlib can't be removed. Template is licensed under CC BY 3.0. -->
+</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- footer part end-->
+
+    <!-- popper js -->
+    <script src="js/popper.min.js"></script>
+    <!-- bootstrap js -->
+    <script src="js/bootstrap.min.js"></script>
+    <!-- owl carousel js -->
+    <script src="js/owl.carousel.min.js"></script>
+    <script src="js/jquery.nice-select.min.js"></script>
+    <!-- contact js -->
+    <script src="js/jquery.ajaxchimp.min.js"></script>
+    <script src="js/jquery.form.js"></script>
+    <script src="js/jquery.validate.min.js"></script>
+    <script src="js/mail-script.js"></script>
+    <script src="js/contact.js"></script>
+    <!-- custom js -->
+    <script src="js/custom.js"></script>
+</body>
+
+</html>
