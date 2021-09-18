@@ -66,7 +66,7 @@ class TripleDataset(Dataset):
         triples = np.ndarray(shape=(0, 3), dtype=int)
         for triples_file in triples_files:
             try:
-                file_triples = pd.read_csv(self.fp + triples_file, sep=" |,", skiprows=1, header=None,
+                file_triples = pd.read_csv(self.fp + triples_file, sep=" |,|\t", skiprows=1, header=None,
                                      dtype={0: np.int32, 1: np.int32, 2: np.int32}, engine="python").to_numpy()
                 file_triples[:, [1, 2]] = file_triples[:, [2, 1]]
                 triples = np.append(triples, file_triples, axis=0)
@@ -204,7 +204,7 @@ class TripleDataset(Dataset):
             for filename in triple_file_names:
                 triples_file = dataset_fp + filename + ".txt"
                 try:
-                    new_triples = pd.read_csv(triples_file, sep=" |,", skiprows=1, header=None,
+                    new_triples = pd.read_csv(triples_file, sep=" |,|\t", skiprows=1, header=None,
                                          dtype={0: np.int32, 1: np.int32, 2: np.int32}, engine="python").to_numpy()
                     new_triples[:, [1, 2]] = new_triples[:, [2, 1]]
                     all_triples = np.append(all_triples, new_triples, axis=0)
@@ -233,7 +233,7 @@ class TripleDataset(Dataset):
 
     def load_counts(self, ground_truth_file, filtering_file=None):
         # loads the ground truth triples from the full dataset
-        gt_triples = pd.read_csv(self.fp + ground_truth_file, sep=" |,", skiprows=1, header=None,
+        gt_triples = pd.read_csv(self.fp + ground_truth_file, sep=" |,|\t", skiprows=1, header=None,
                                  dtype={0: np.int32, 1: np.int32, 2: np.int32}, engine="python").to_numpy()
         gt_triples[:, [1, 2]] = gt_triples[:, [2, 1]]
 
@@ -245,7 +245,7 @@ class TripleDataset(Dataset):
 
         if filtering_file is not None:  # TODO consider further what SHOULD be filtered...
             # loads the train triples from the full dataset
-            train_triples = pd.read_csv(self.fp + filtering_file, sep=" |,", skiprows=1, header=None,
+            train_triples = pd.read_csv(self.fp + filtering_file, sep=" |,|\t", skiprows=1, header=None,
                                         dtype={0: np.int32, 1: np.int32, 2: np.int32}, engine="python").to_numpy()
             train_triples[:, [1, 2]] = train_triples[:, [2, 1]]
 

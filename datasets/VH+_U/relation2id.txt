@@ -1,0 +1,12 @@
+11
+HasEffect	0
+InverseActionOf	1
+InverseStateOf	2
+LocInRoom	3
+ObjCanBe	4
+ObjInLoc	5
+ObjInRoom	6
+ObjOnLoc	7
+ObjUsedTo	8
+ObjhasState	9
+OperatesOn	10
